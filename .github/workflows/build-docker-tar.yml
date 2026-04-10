@@ -1,0 +1,57 @@
+name: Build Docker Tar
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-tar:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: Build Docker image
+      run: |
+        docker build --target production -t genealogy:latest .
+        
+    - name: Save image to tar
+      run: |
+        docker save genealogy:latest | gzip > genealogy-image.tar.gz
+        ls -lh genealogy-image.tar.gz
+        
+    - name: Upload tar artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: genealogy-docker-image
+        path: genealogy-image.tar.gz
+        retention-days: 90
+        compression-level: 0
+        
+    - name: Create Release with tar
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: genealogy-image.tar.gz
+        body: |
+          ## Docker 镜像文件
+          
+          下载 `genealogy-image.tar.gz` 后，在本地加载：
+          
+          ```bash
+          # 加载镜像
+          docker load < genealogy-image.tar.gz
+          
+          # 查看镜像
+          docker images | grep genealogy
+          
+          # 运行容器
+          docker run -d -p 3000:3000 -v $(pwd)/data:/app/data genealogy:latest
+          ```
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

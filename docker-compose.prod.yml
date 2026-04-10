@@ -1,0 +1,46 @@
+version: '3.8'
+
+# 生产环境配置（优化版本）
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: genealogy:latest
+    container_name: genealogy
+    ports:
+      - "3000:3000"
+    volumes:
+      # 命名卷持久化数据
+      - genealogy-data:/app/data
+      - genealogy-backups:/app/backups
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-刘}
+    restart: always
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  genealogy-data:
+    driver: local
+  genealogy-backups:
+    driver: local
