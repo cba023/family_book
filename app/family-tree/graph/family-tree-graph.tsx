@@ -75,6 +75,7 @@ interface FamilyTreeGraphProps {
 interface FamilyTreeGraphInnerProps {
   initialData: FamilyMemberNode[];
   onMemberClick?: (member: FamilyMemberNode) => void;
+  onSpouseClick?: (spouseId: number) => void;
 }
 
 // 布局常量
@@ -89,7 +90,8 @@ function getLayoutedElements(
   childrenMap: Map<number, number[]>,
   collapsedIds: Set<number>,
   highlightedId: number | null,
-  onToggleCollapse?: (id: number) => void
+  onToggleCollapse?: (id: number) => void,
+  onSpouseClick?: (spouseId: number) => void
 ): { nodes: Node[]; edges: Edge[] } {
   if (!members.length) {
     return { nodes: [], edges: [] };
@@ -246,6 +248,7 @@ function getLayoutedElements(
       hasChildren,
       collapsed: collapsedIds.has(member.id),
       onToggleCollapse,
+      onSpouseClick,
       branchColor: nodeColor, // 传递计算后的具体颜色
     };
 
@@ -284,7 +287,7 @@ function getLayoutedElements(
   return { nodes: [...memberNodes, ...generationNodes], edges };
 }
 
-const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, onMemberClick }: FamilyTreeGraphInnerProps) {
+const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, onMemberClick, onSpouseClick }: FamilyTreeGraphInnerProps) {
   const reactFlowInstance = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
   // 本地模式：固定显示本地用户
@@ -386,8 +389,8 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
 
   // 转换数据为节点和边（使用 dagre 自动布局）
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => getLayoutedElements(initialData, childrenMap, collapsedIds, highlightedId, onToggleCollapse),
-    [initialData, childrenMap, collapsedIds, highlightedId, onToggleCollapse]
+    () => getLayoutedElements(initialData, childrenMap, collapsedIds, highlightedId, onToggleCollapse, onSpouseClick),
+    [initialData, childrenMap, collapsedIds, highlightedId, onToggleCollapse, onSpouseClick]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -473,13 +476,13 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
   // 重置视图
   const onResetView = useCallback(() => {
     // 重置节点位置 (重新计算布局，保持折叠状态)
-    const { nodes: resetNodes } = getLayoutedElements(initialData, childrenMap, collapsedIds, highlightedId, onToggleCollapse);
+    const { nodes: resetNodes } = getLayoutedElements(initialData, childrenMap, collapsedIds, highlightedId, onToggleCollapse, onSpouseClick);
     setNodes(resetNodes);
     // 重置视图位置，加一点延迟确保节点渲染完成
     setTimeout(() => {
       reactFlowInstance.fitView({ padding: 0.2, duration: 300 });
     }, 10);
-  }, [reactFlowInstance, initialData, childrenMap, collapsedIds, highlightedId, setNodes, onToggleCollapse]);
+  }, [reactFlowInstance, initialData, childrenMap, collapsedIds, highlightedId, setNodes, onToggleCollapse, onSpouseClick]);
 
   // 搜索功能 - 支持多人搜索
   const onSearch = useCallback(() => {
@@ -1008,10 +1011,31 @@ export function FamilyTreeGraph({ initialData }: FamilyTreeGraphProps) {
     setIsDetailOpen(true);
   }, []);
 
+  // 处理配偶点击 - 需要查询所有成员（包括嫁入的）
+  const handleSpouseClick = useCallback(async (spouseId: number) => {
+    // 首先在当前数据中查找
+    let spouse = initialData.find((m) => m.id === spouseId);
+
+    // 如果找不到（嫁入的成员不在 initialData 中），需要额外查询
+    if (!spouse) {
+      try {
+        const { fetchMemberById } = await import("./actions");
+        spouse = await fetchMemberById(spouseId);
+      } catch (error) {
+        console.error("Error fetching spouse:", error);
+      }
+    }
+
+    if (spouse) {
+      setSelectedMember(spouse);
+      setIsDetailOpen(true);
+    }
+  }, [initialData]);
+
   return (
     <>
       <ReactFlowProvider>
-        <FamilyTreeGraphInner initialData={initialData} onMemberClick={handleMemberClick} />
+        <FamilyTreeGraphInner initialData={initialData} onMemberClick={handleMemberClick} onSpouseClick={handleSpouseClick} />
       </ReactFlowProvider>
 
       {/* 成员详情弹窗 */}

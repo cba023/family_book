@@ -29,13 +29,15 @@ export function initDatabase() {
       gender TEXT CHECK(gender IN ('男', '女')),
       official_position TEXT,
       is_alive BOOLEAN DEFAULT 1,
-      spouse TEXT,
+      spouse_id INTEGER,
+      is_married_in BOOLEAN DEFAULT 0,
       remarks TEXT,
       birthday TEXT,
       death_date TEXT,
       residence_place TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (father_id) REFERENCES family_members(id) ON DELETE SET NULL
+      FOREIGN KEY (father_id) REFERENCES family_members(id) ON DELETE SET NULL,
+      FOREIGN KEY (spouse_id) REFERENCES family_members(id) ON DELETE SET NULL
     );
 
     -- 博客文章表

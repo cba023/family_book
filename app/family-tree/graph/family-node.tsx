@@ -14,7 +14,8 @@ export interface FamilyNodeData extends FamilyMemberNode {
   hasChildren?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: (id: number) => void;
-  branchColor?: string; 
+  onSpouseClick?: (spouseId: number) => void;
+  branchColor?: string;
   [key: string]: unknown;
 }
 
@@ -103,17 +104,24 @@ function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
         )} title={nodeData.name}>
           {nodeData.name}
         </div>
-        
-        {/* 配偶信息 - 新增 */}
-        {nodeData.spouse && (
+
+        {/* 配偶信息 */}
+        {nodeData.spouse_name && nodeData.spouse_id && (
           <div className="flex items-center justify-center gap-0.5 w-full -mt-0.5 mb-0.5">
             <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap select-none">配:</span>
-            <span 
-              className="text-xs text-muted-foreground font-medium truncate max-w-[80%] text-center"
-              title={nodeData.spouse}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (nodeData.onSpouseClick && nodeData.spouse_id) {
+                  nodeData.onSpouseClick(nodeData.spouse_id);
+                }
+              }}
+              className="text-xs text-blue-600 dark:text-blue-400 font-medium truncate max-w-[80%] text-center hover:underline cursor-pointer"
+              title={nodeData.spouse_name}
             >
-              {nodeData.spouse}
-            </span>
+              {nodeData.spouse_name}
+            </button>
           </div>
         )}
 
@@ -129,18 +137,18 @@ function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
             </Badge>
           )}
         </div>
-        
+
         {nodeData.gender && (
           <span className={cn(
             "text-xs",
-            nodeData.gender === "男" 
-              ? (nodeData.is_alive ? "text-blue-600 dark:text-blue-400" : "text-blue-800/60 dark:text-blue-300/50") 
+            nodeData.gender === "男"
+              ? (nodeData.is_alive ? "text-blue-600 dark:text-blue-400" : "text-blue-800/60 dark:text-blue-300/50")
               : (nodeData.is_alive ? "text-pink-600 dark:text-pink-400" : "text-pink-800/60 dark:text-pink-300/50")
           )}>
             {nodeData.gender}
           </span>
         )}
-        
+
         {!nodeData.is_alive && (
           <span className="text-xs text-muted-foreground/80 italic">已故</span>
         )}

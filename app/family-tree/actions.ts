@@ -13,7 +13,9 @@ export interface FamilyMember {
   gender: "男" | "女" | null;
   official_position: string | null;
   is_alive: boolean;
-  spouse: string | null;
+  spouse_id: number | null;
+  spouse_name: string | null;
+  is_married_in: boolean;
   remarks: string | null;
   birthday: string | null;
   death_date: string | null;
@@ -56,9 +58,12 @@ export async function fetchFamilyMembers(
       LIMIT ? OFFSET ?
     `).all(...params, pageSize, offset) as any[];
 
-    // 获取所有父亲 ID
+    // 获取所有父亲 ID 和配偶 ID
     const fatherIds = data
       .map((item) => item.father_id)
+      .filter((id): id is number => id !== null);
+    const spouseIds = data
+      .map((item) => item.spouse_id)
       .filter((id): id is number => id !== null);
 
     // 批量查询父亲姓名
@@ -72,11 +77,24 @@ export async function fetchFamilyMembers(
       fatherMap = Object.fromEntries(fathers.map((f) => [f.id, f.name]));
     }
 
+    // 批量查询配偶姓名
+    let spouseMap: Record<number, string> = {};
+    if (spouseIds.length > 0) {
+      const placeholders = spouseIds.map(() => '?').join(',');
+      const spouses = db.prepare(
+        `SELECT id, name FROM family_members WHERE id IN (${placeholders})`
+      ).all(...spouseIds) as any[];
+
+      spouseMap = Object.fromEntries(spouses.map((s) => [s.id, s.name]));
+    }
+
     // 转换数据格式
     const transformedData: FamilyMember[] = data.map((item) => ({
       ...item,
       is_alive: item.is_alive === 1,
+      is_married_in: item.is_married_in === 1,
       father_name: item.father_id ? fatherMap[item.father_id] || null : null,
+      spouse_name: item.spouse_id ? spouseMap[item.spouse_id] || null : null,
     }));
 
     return { data: transformedData, count: countResult.count, error: null };
@@ -94,7 +112,8 @@ export interface CreateMemberInput {
   gender?: "男" | "女" | null;
   official_position?: string | null;
   is_alive?: boolean;
-  spouse?: string | null;
+  spouse_id?: number | null;
+  is_married_in?: boolean;
   remarks?: string | null;
   birthday?: string | null;
   death_date?: string | null;
@@ -104,13 +123,14 @@ export interface CreateMemberInput {
 export async function createFamilyMember(
   input: CreateMemberInput
 ): Promise<{ success: boolean; error: string | null }> {
-  try {
+  const transaction = db.transaction(() => {
+    // 1. 插入新成员
     const result = db.prepare(`
       INSERT INTO family_members (
         name, generation, sibling_order, father_id, gender,
-        official_position, is_alive, spouse, remarks, birthday,
+        official_position, is_alive, spouse_id, is_married_in, remarks, birthday,
         death_date, residence_place, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `).run(
       input.name,
       input.generation ?? null,
@@ -119,13 +139,29 @@ export async function createFamilyMember(
       input.gender ?? null,
       input.official_position ?? null,
       input.is_alive ?? true ? 1 : 0,
-      input.spouse ?? null,
+      input.spouse_id ?? null,
+      input.is_married_in ? 1 : 0,
       input.remarks ?? null,
       input.birthday ?? null,
       input.death_date ?? null,
       input.residence_place ?? null
     );
 
+    const newMemberId = result.lastInsertRowid as number;
+
+    // 2. 如果指定了配偶，双向关联
+    if (input.spouse_id) {
+      // 更新配偶的 spouse_id 指向新成员
+      db.prepare(`
+        UPDATE family_members SET spouse_id = ?, updated_at = datetime('now') WHERE id = ?
+      `).run(newMemberId, input.spouse_id);
+    }
+
+    return newMemberId;
+  });
+
+  try {
+    transaction();
     revalidatePath("/family-tree", "layout");
     return { success: true, error: null };
   } catch (error) {
@@ -155,14 +191,19 @@ export async function deleteFamilyMembers(
 
 // 获取所有成员用于父亲选择下拉框
 export async function fetchAllMembersForSelect(): Promise<
-  { id: number; name: string; generation: number | null }[]
+  { id: number; name: string; generation: number | null; gender: string | null; is_married_in: boolean; father_id: number | null; spouse_id: number | null }[]
 > {
   try {
-    return db.prepare(`
-      SELECT id, name, generation 
-      FROM family_members 
+    const members = db.prepare(`
+      SELECT id, name, generation, gender, is_married_in, father_id, spouse_id
+      FROM family_members
       ORDER BY generation ASC, name ASC
     `).all() as any[];
+
+    return members.map(m => ({
+      ...m,
+      is_married_in: m.is_married_in === 1
+    }));
   } catch (error) {
     console.error("Error fetching members for select:", error);
     return [];
@@ -236,7 +277,16 @@ export async function fetchMemberById(
 export async function updateFamilyMember(
   input: UpdateMemberInput
 ): Promise<{ success: boolean; error: string | null }> {
-  try {
+  const transaction = db.transaction(() => {
+    // 1. 获取当前成员的原有配偶
+    const currentMember = db.prepare(`
+      SELECT spouse_id FROM family_members WHERE id = ?
+    `).get(input.id) as { spouse_id: number | null } | undefined;
+
+    const oldSpouseId = currentMember?.spouse_id;
+    const newSpouseId = input.spouse_id;
+
+    // 2. 更新当前成员
     db.prepare(`
       UPDATE family_members SET
         name = ?,
@@ -246,7 +296,8 @@ export async function updateFamilyMember(
         gender = ?,
         official_position = ?,
         is_alive = ?,
-        spouse = ?,
+        spouse_id = ?,
+        is_married_in = ?,
         remarks = ?,
         birthday = ?,
         death_date = ?,
@@ -261,7 +312,8 @@ export async function updateFamilyMember(
       input.gender ?? null,
       input.official_position ?? null,
       input.is_alive ?? true ? 1 : 0,
-      input.spouse ?? null,
+      input.spouse_id ?? null,
+      input.is_married_in ? 1 : 0,
       input.remarks ?? null,
       input.birthday ?? null,
       input.death_date ?? null,
@@ -269,6 +321,24 @@ export async function updateFamilyMember(
       input.id
     );
 
+    // 3. 处理配偶关系的双向关联
+    if (newSpouseId && newSpouseId !== oldSpouseId) {
+      // 设置了新配偶，更新新配偶的 spouse_id 指向当前成员
+      db.prepare(`
+        UPDATE family_members SET spouse_id = ?, updated_at = datetime('now') WHERE id = ?
+      `).run(input.id, newSpouseId);
+    }
+
+    if (oldSpouseId && oldSpouseId !== newSpouseId) {
+      // 解除了旧配偶关系，清除旧配偶的 spouse_id
+      db.prepare(`
+        UPDATE family_members SET spouse_id = NULL, updated_at = datetime('now') WHERE id = ?
+      `).run(oldSpouseId);
+    }
+  });
+
+  try {
+    transaction();
     revalidatePath("/family-tree", "layout");
     return { success: true, error: null };
   } catch (error) {

@@ -119,9 +119,27 @@ export function MemberDetailDialog({
 
                 {/* Content Body - Native Scroll */}
                 <div className="flex-1 w-full overflow-y-auto font-serif scrollbar-thin scrollbar-thumb-stone-200 dark:scrollbar-thumb-stone-700 p-5 sm:p-8">
-                  <div className="space-y-5 sm:space-y-6">
-                    
-                    {/* Key Relations */}
+                  <div className="space-y-4 sm:space-y-5">
+
+                    {/* 第一行：ID、世代、排行 */}
+                    <div className="grid grid-cols-3 gap-3 sm:gap-4">
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">ID</span>
+                        <p className="text-sm sm:text-base text-stone-700 dark:text-stone-300 font-mono">#{member.id}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">世代</span>
+                        <p className="text-sm sm:text-base text-stone-700 dark:text-stone-300">{member.generation ? `第${member.generation}世` : "未记录"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">排行</span>
+                        <p className="text-sm sm:text-base text-stone-700 dark:text-stone-300">{member.sibling_order ?? "未记录"}</p>
+                      </div>
+                    </div>
+
+                    <div className="w-full h-px bg-stone-200 dark:bg-stone-700" />
+
+                    {/* 第二行：父亲、配偶 */}
                     <div className="grid grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-1">
                         <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">父亲</span>
@@ -132,31 +150,82 @@ export function MemberDetailDialog({
                       <div className="space-y-1">
                         <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">配偶</span>
                         <div className="p-2 sm:p-3 bg-stone-50 dark:bg-stone-800/50 rounded border border-stone-100 dark:border-stone-700 text-stone-800 dark:text-stone-200 font-medium text-sm sm:text-base">
-                          {member.spouse || "未记录"}
+                          {(member as any).spouse_name || (member as any).spouse || "未记录"}
                         </div>
                       </div>
                     </div>
 
-                    <div className="w-full h-px bg-stone-200 dark:bg-stone-700 my-2 sm:my-4" />
+                    <div className="w-full h-px bg-stone-200 dark:bg-stone-700" />
 
-                    {/* Timeline Data */}
+                    {/* 第三行：性别、嫁入、在世 */}
+                    <div className="grid grid-cols-3 gap-3 sm:gap-4">
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">性别</span>
+                        <p className="text-sm sm:text-base text-stone-700 dark:text-stone-300">{member.gender || "未记录"}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">嫁入</span>
+                        <p className="text-sm sm:text-base">
+                          {(member as any).is_married_in ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange-100 text-orange-800">
+                              是
+                            </span>
+                          ) : (
+                            <span className="text-stone-700 dark:text-stone-300">否</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">在世</span>
+                        <p className="text-sm sm:text-base">
+                          {member.is_alive ? (
+                            <span className="text-green-600 dark:text-green-400">是</span>
+                          ) : (
+                            <span className="text-stone-500 dark:text-stone-400">否</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="w-full h-px bg-stone-200 dark:bg-stone-700" />
+
+                    {/* 第四行：生辰、卒年 */}
                     <div className="grid grid-cols-2 gap-4 sm:gap-6">
                       <div className="space-y-1">
-                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">生辰</span>
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">生日</span>
                         <p className="text-base sm:text-lg text-stone-700 dark:text-stone-300">{formatDate(member.birthday)}</p>
                       </div>
-                      {!member.is_alive && (
-                        <div className="space-y-1">
-                          <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">卒年</span>
-                          <p className="text-base sm:text-lg text-stone-700 dark:text-stone-300">{formatDate(member.death_date)}</p>
-                        </div>
-                      )}
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">卒年</span>
+                        <p className="text-base sm:text-lg text-stone-700 dark:text-stone-300">{formatDate(member.death_date)}</p>
+                      </div>
                     </div>
 
+                    <div className="w-full h-px bg-stone-200 dark:bg-stone-700" />
+
+                    {/* 第五行：居住地、职业 */}
+                    <div className="grid grid-cols-2 gap-4 sm:gap-6">
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">居住地</span>
+                        <p className="text-stone-700 dark:text-stone-300 text-sm sm:text-base">
+                          {member.residence_place || "未记录"}
+                        </p>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">职业</span>
+                        <p className="text-stone-700 dark:text-stone-300 text-sm sm:text-base">
+                          {member.official_position || "未记录"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="w-full h-px bg-stone-200 dark:bg-stone-700" />
+
+                    {/* 更新时间 */}
                     <div className="space-y-1">
-                      <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">居住地</span>
-                      <p className="text-stone-700 dark:text-stone-300 flex items-center gap-2 text-sm sm:text-base">
-                        {member.residence_place || "未记录"}
+                      <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">更新时间</span>
+                      <p className="text-sm text-stone-500 dark:text-stone-400">
+                        {(member as any).updated_at ? new Date((member as any).updated_at).toLocaleString('zh-CN') : "未记录"}
                       </p>
                     </div>
 
