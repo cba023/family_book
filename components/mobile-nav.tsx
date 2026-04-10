@@ -28,17 +28,7 @@ export function MobileNav({ children }: { children: React.ReactNode }) {
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/family-tree/graph" className="w-full cursor-pointer">
-            2D 族谱
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/family-tree/graph-3d" className="w-full cursor-pointer">
-            3D 族谱
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/family-tree/timeline" className="w-full cursor-pointer">
-            时间轴
+            族谱视图
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
@@ -54,6 +44,11 @@ export function MobileNav({ children }: { children: React.ReactNode }) {
         <DropdownMenuItem asChild>
           <Link href="/blog" className="w-full cursor-pointer">
             家族博客
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/family-tree/timeline" className="w-full cursor-pointer">
+            时间轴
           </Link>
         </DropdownMenuItem>
 

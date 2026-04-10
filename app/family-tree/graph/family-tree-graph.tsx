@@ -32,6 +32,9 @@ import {
   Lock,
   Unlock,
   MoreVertical,
+  ChevronLeft,
+  ChevronRight,
+  Users,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,6 +42,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 import { toPng } from "html-to-image";
 import { FamilyMemberNodeType, type FamilyNodeData } from "./family-node";
 import { GenerationNodeType } from "./generation-node";
@@ -285,6 +294,10 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   // 新增：存储高亮路径上的所有元素 ID（节点 ID 和 连线 ID）
   const [highlightedPathIds, setHighlightedPathIds] = useState<Set<string>>(new Set());
+  // 新增：搜索结果列表和当前索引
+  const [searchResults, setSearchResults] = useState<FamilyMemberNode[]>([]);
+  const [currentResultIndex, setCurrentResultIndex] = useState(0);
+  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = useState(false);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDraggable, setIsDraggable] = useState(false);
@@ -468,18 +481,27 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
     }, 10);
   }, [reactFlowInstance, initialData, childrenMap, collapsedIds, highlightedId, setNodes, onToggleCollapse]);
 
-  // 搜索功能
+  // 搜索功能 - 支持多人搜索
   const onSearch = useCallback(() => {
     if (!searchQuery.trim()) {
       setHighlightedId(null);
+      setSearchResults([]);
+      setIsSearchPopoverOpen(false);
       return;
     }
 
-    const found = initialData.find((member) =>
+    // 查找所有匹配的成员
+    const foundMembers = initialData.filter((member) =>
       member.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    if (found) {
+    setSearchResults(foundMembers);
+
+    if (foundMembers.length > 0) {
+      setCurrentResultIndex(0);
+      const found = foundMembers[0];
+      
+      // 展开必要的节点
       let current = found;
       const idsToExpand = new Set<number>();
       while (current.father_id) {
@@ -503,10 +525,61 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
       } else {
         setHighlightedId(found.id);
       }
+
+      // 如果有多个人，打开选择弹窗
+      if (foundMembers.length > 1) {
+        setIsSearchPopoverOpen(true);
+      }
     } else {
       setHighlightedId(null);
+      setIsSearchPopoverOpen(false);
     }
   }, [searchQuery, initialData, collapsedIds]);
+
+  // 切换到指定索引的搜索结果
+  const goToSearchResult = useCallback((index: number) => {
+    if (index < 0 || index >= searchResults.length) return;
+    
+    setCurrentResultIndex(index);
+    const found = searchResults[index];
+    
+    // 展开必要的节点
+    let current = found;
+    const idsToExpand = new Set<number>();
+    while (current.father_id) {
+      if (collapsedIds.has(current.father_id)) {
+        idsToExpand.add(current.father_id);
+      }
+      const father = initialData.find(m => m.id === current.father_id);
+      if (!father) break;
+      current = father;
+    }
+
+    if (idsToExpand.size > 0) {
+      setCollapsedIds(prev => {
+        const next = new Set(prev);
+        idsToExpand.forEach(id => next.delete(id));
+        return next;
+      });
+      setTimeout(() => {
+        setHighlightedId(found.id);
+      }, 100);
+    } else {
+      setHighlightedId(found.id);
+    }
+  }, [searchResults, collapsedIds, initialData]);
+
+  // 上一个搜索结果
+  const goToPrevResult = useCallback(() => {
+    const newIndex = currentResultIndex > 0 ? currentResultIndex - 1 : searchResults.length - 1;
+    goToSearchResult(newIndex);
+  }, [currentResultIndex, searchResults.length, goToSearchResult]);
+
+  // 下一个搜索结果
+  const goToNextResult = useCallback(() => {
+    const newIndex = currentResultIndex < searchResults.length - 1 ? currentResultIndex + 1 : 0;
+    goToSearchResult(newIndex);
+  }, [currentResultIndex, searchResults.length, goToSearchResult]);
 
   // 监听 highlight 变化后聚焦
   useEffect(() => {
@@ -525,6 +598,9 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
   const onClearSearch = useCallback(() => {
     setSearchQuery("");
     setHighlightedId(null);
+    setSearchResults([]);
+    setCurrentResultIndex(0);
+    setIsSearchPopoverOpen(false);
   }, []);
 
   // 节点点击事件
@@ -765,6 +841,68 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
               <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onClearSearch} title="清除搜索内容">
                 <X className="h-4 w-4" />
               </Button>
+            )}
+            {/* 多人搜索结果导航 */}
+            {searchResults.length > 1 && (
+              <>
+                <div className="h-4 w-px bg-border mx-1" />
+                <Popover open={isSearchPopoverOpen} onOpenChange={setIsSearchPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="ghost" className="h-8 px-2 gap-1">
+                      <Users className="h-3.5 w-3.5" />
+                      <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                        {currentResultIndex + 1}/{searchResults.length}
+                      </Badge>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-0" align="start">
+                    <div className="p-2 border-b bg-muted/50">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        找到 {searchResults.length} 位同名成员
+                      </span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {searchResults.map((member, index) => (
+                        <button
+                          key={member.id}
+                          onClick={() => {
+                            goToSearchResult(index);
+                            setIsSearchPopoverOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center justify-between ${
+                            index === currentResultIndex ? "bg-accent" : ""
+                          }`}
+                        >
+                          <span className="font-medium">{member.name}</span>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            {member.generation && <span>第{member.generation}世</span>}
+                            {member.father_id && (
+                              <span className="truncate max-w-[80px]">
+                                (父: {initialData.find(m => m.id === member.father_id)?.name || "未知"})
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={goToPrevResult} title="上一个">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={goToNextResult} title="下一个">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+            {/* 单结果提示 */}
+            {searchResults.length === 1 && (
+              <div className="h-4 w-px bg-border mx-1" />
+            )}
+            {searchResults.length === 1 && (
+              <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                1/1
+              </Badge>
             )}
           </div>
 

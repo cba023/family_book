@@ -24,13 +24,19 @@ export default function BlogLayout({
               成员列表
             </Link>
             <Link href="/family-tree/graph" className="hover:text-primary transition-colors">
-              2D 族谱
+              族谱视图
             </Link>
-            <Link href="/family-tree/graph-3d" className="hover:text-primary transition-colors">
-              3D 族谱
+            <Link href="/family-tree/statistics" className="hover:text-primary transition-colors">
+              统计分析
+            </Link>
+            <Link href="/family-tree/biography-book" className="hover:text-primary transition-colors">
+              生平册
             </Link>
             <Link href="/blog" className="text-primary font-semibold">
               家族博客
+            </Link>
+            <Link href="/family-tree/timeline" className="hover:text-primary transition-colors">
+              时间轴
             </Link>
           </nav>
 

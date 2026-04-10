@@ -21,7 +21,15 @@ import {
   User,
   X,
   Map,
+  ChevronLeft,
+  ChevronRight,
+  Users,
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import SpriteText from "three-spritetext";
 import { useTheme } from "next-themes";
 import { MemberDetailDialog } from "../member-detail-dialog";
@@ -65,6 +73,10 @@ export function FamilyForceGraph({ data }: ForceGraphProps) {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
+  // 新增：搜索结果列表和当前索引
+  const [searchResults, setSearchResults] = useState<FamilyMemberNode[]>([]);
+  const [currentResultIndex, setCurrentResultIndex] = useState(0);
+  const [isSearchPopoverOpen, setIsSearchPopoverOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<FamilyMemberNode | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -200,15 +212,25 @@ export function FamilyForceGraph({ data }: ForceGraphProps) {
   }, [isTourActive, isTourPaused, currentTourStep, tourPath, graphData.nodes]);
 
 
-  // 搜索功能
+  // 搜索功能 - 支持多人搜索
   const handleSearch = useCallback(() => {
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim()) {
+      setHighlightedId(null);
+      setSearchResults([]);
+      setIsSearchPopoverOpen(false);
+      return;
+    }
 
-    const foundNode = graphData.nodes.find((node) =>
+    // 查找所有匹配的节点
+    const foundNodes = graphData.nodes.filter((node) =>
       node.name.includes(searchQuery.trim())
     );
 
-    if (foundNode && fgRef.current) {
+    setSearchResults(foundNodes);
+
+    if (foundNodes.length > 0 && fgRef.current) {
+      setCurrentResultIndex(0);
+      const foundNode = foundNodes[0];
       setHighlightedId(foundNode.id);
       
       // 移动相机视角到该节点
@@ -220,16 +242,62 @@ export function FamilyForceGraph({ data }: ForceGraphProps) {
           x: (foundNode.x || 0) * distRatio,
           y: (foundNode.y || 0) * distRatio,
           z: (foundNode.z || 0) * distRatio,
-        }, // new position
-        { x: foundNode.x, y: foundNode.y, z: foundNode.z }, // lookAt
-        3000 // ms transition duration
+        },
+        { x: foundNode.x, y: foundNode.y, z: foundNode.z },
+        3000
       );
+
+      // 如果有多个人，打开选择弹窗
+      if (foundNodes.length > 1) {
+        setIsSearchPopoverOpen(true);
+      }
+    } else {
+      setHighlightedId(null);
+      setIsSearchPopoverOpen(false);
     }
   }, [graphData, searchQuery]);
+
+  // 切换到指定索引的搜索结果
+  const goToSearchResult = useCallback((index: number) => {
+    if (index < 0 || index >= searchResults.length || !fgRef.current) return;
+    
+    setCurrentResultIndex(index);
+    const foundNode = searchResults[index];
+    setHighlightedId(foundNode.id);
+    
+    // 移动相机视角到该节点
+    const distance = 100;
+    const distRatio = 1 + distance / Math.hypot(foundNode.x || 0, foundNode.y || 0, foundNode.z || 0);
+
+    fgRef.current.cameraPosition(
+      {
+        x: (foundNode.x || 0) * distRatio,
+        y: (foundNode.y || 0) * distRatio,
+        z: (foundNode.z || 0) * distRatio,
+      },
+      { x: foundNode.x, y: foundNode.y, z: foundNode.z },
+      3000
+    );
+  }, [searchResults]);
+
+  // 上一个搜索结果
+  const goToPrevResult = useCallback(() => {
+    const newIndex = currentResultIndex > 0 ? currentResultIndex - 1 : searchResults.length - 1;
+    goToSearchResult(newIndex);
+  }, [currentResultIndex, searchResults.length, goToSearchResult]);
+
+  // 下一个搜索结果
+  const goToNextResult = useCallback(() => {
+    const newIndex = currentResultIndex < searchResults.length - 1 ? currentResultIndex + 1 : 0;
+    goToSearchResult(newIndex);
+  }, [currentResultIndex, searchResults.length, goToSearchResult]);
 
   const clearSearch = () => {
     setSearchQuery("");
     setHighlightedId(null);
+    setSearchResults([]);
+    setCurrentResultIndex(0);
+    setIsSearchPopoverOpen(false);
   };
 
   // 重置视图
@@ -303,6 +371,68 @@ export function FamilyForceGraph({ data }: ForceGraphProps) {
             <Button size="icon" variant="ghost" className="h-8 w-8" onClick={clearSearch}>
               <X className="h-4 w-4" />
             </Button>
+          )}
+          {/* 多人搜索结果导航 */}
+          {searchResults.length > 1 && (
+            <>
+              <div className="h-4 w-px bg-border mx-1" />
+              <Popover open={isSearchPopoverOpen} onOpenChange={setIsSearchPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="ghost" className="h-8 px-2 gap-1">
+                    <Users className="h-3.5 w-3.5" />
+                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                      {currentResultIndex + 1}/{searchResults.length}
+                    </Badge>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-0" align="start">
+                  <div className="p-2 border-b bg-muted/50">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      找到 {searchResults.length} 位同名成员
+                    </span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto">
+                    {searchResults.map((member, index) => (
+                      <button
+                        key={member.id}
+                        onClick={() => {
+                          goToSearchResult(index);
+                          setIsSearchPopoverOpen(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-accent transition-colors flex items-center justify-between ${
+                          index === currentResultIndex ? "bg-accent" : ""
+                        }`}
+                      >
+                        <span className="font-medium">{member.name}</span>
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          {member.generation && <span>第{member.generation}世</span>}
+                          {member.father_id && (
+                            <span className="truncate max-w-[80px]">
+                              (父: {data.find(m => m.id === member.father_id)?.name || "未知"})
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={goToPrevResult} title="上一个">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button size="icon" variant="ghost" className="h-8 w-8" onClick={goToNextResult} title="下一个">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+          {/* 单结果提示 */}
+          {searchResults.length === 1 && (
+            <div className="h-4 w-px bg-border mx-1" />
+          )}
+          {searchResults.length === 1 && (
+            <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+              1/1
+            </Badge>
           )}
         </div>
       </div>
