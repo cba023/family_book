@@ -89,3 +89,28 @@
 .animate-brush-reveal {
   animation: brush-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+/* Markmap 样式 */
+.markmap {
+  font-family: var(--font-noto-serif-sc), serif;
+}
+
+.markmap-node {
+  cursor: pointer;
+}
+
+.markmap-node circle {
+  fill: hsl(var(--primary));
+  stroke: hsl(var(--primary));
+}
+
+.markmap-link {
+  fill: none;
+  stroke: hsl(var(--border));
+  stroke-width: 1.5px;
+}
+
+.markmap-node-text {
+  fill: hsl(var(--foreground));
+  font-size: 14px;
+}

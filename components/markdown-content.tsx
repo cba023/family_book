@@ -1,10 +1,22 @@
 "use client";
 
+import React from "react";
+import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import rehypeRaw from "rehype-raw";
 import "highlight.js/styles/github.css";
+
+// 动态导入 Markmap 组件，避免 SSR 问题
+const MarkmapViewer = dynamic(() => import("./markmap-viewer"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-96 border rounded-lg bg-muted/20 animate-pulse flex items-center justify-center">
+      <span className="text-muted-foreground">加载思维导图...</span>
+    </div>
+  ),
+});
 
 interface MarkdownContentProps {
   content: string;
@@ -43,6 +55,20 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
               {children}
             </blockquote>
           ),
+          pre: ({ children, ...props }) => {
+            // 检查子元素是否是 markmap 代码块
+            const childArray = React.Children.toArray(children);
+            const codeElement = childArray[0] as React.ReactElement;
+            
+            // 检查 className 是否包含 markmap
+            const className = codeElement?.props?.className || "";
+            
+            if (className.includes("markmap")) {
+              const content = String(codeElement.props.children).replace(/\n$/, "");
+              return <MarkmapViewer content={content} />;
+            }
+            return <pre className="bg-muted rounded-lg p-4 overflow-x-auto my-4" {...props}>{children}</pre>;
+          },
           code: ({ children, className }) => {
             const isInline = !className;
             return isInline ? (
@@ -50,9 +76,7 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
                 {children}
               </code>
             ) : (
-              <pre className="bg-muted rounded-lg p-4 overflow-x-auto my-4">
-                <code className={className}>{children}</code>
-              </pre>
+              <code className={className}>{children}</code>
             );
           },
           a: ({ children, href }) => (
@@ -65,12 +89,40 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
               {children}
             </a>
           ),
-          img: ({ src, alt }) => (
-            <img
-              src={src}
-              alt={alt}
-              className="rounded-lg max-w-full h-auto my-4"
-            />
+          img: ({ src, alt }) => {
+            // 检查是否是视频文件
+            if (src?.match(/\.(mp4|webm|mov|mkv)$/i)) {
+              return (
+                <video
+                  src={src}
+                  controls
+                  className="rounded-lg max-w-full h-auto my-4"
+                  style={{ maxHeight: '500px' }}
+                >
+                  您的浏览器不支持视频播放
+                </video>
+              );
+            }
+            return (
+              <img
+                src={src}
+                alt={alt}
+                className="rounded-lg max-w-full h-auto my-4"
+              />
+            );
+          },
+          // 支持 iframe 嵌入（YouTube/Bilibili 等）
+          iframe: ({ src, width, height }) => (
+            <div className="relative w-full my-4" style={{ paddingBottom: '56.25%' }}>
+              <iframe
+                src={src}
+                width={width || '100%'}
+                height={height || '100%'}
+                className="absolute top-0 left-0 w-full h-full rounded-lg"
+                allowFullScreen
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              />
+            </div>
           ),
           table: ({ children }) => (
             <div className="overflow-x-auto my-4">
