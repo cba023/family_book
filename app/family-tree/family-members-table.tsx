@@ -74,7 +74,7 @@ export function FamilyMembersTable({
   const [editingMember, setEditingMember] = React.useState<FamilyMember | null>(null);
   const [biographyMember, setBiographyMember] = React.useState<FamilyMember | null>(null);
   const [parentOptions, setParentOptions] = React.useState<
-    { id: number; name: string; generation: number | null; gender?: string; is_married_in?: boolean }[]
+    { id: number; name: string; generation: number | null; gender: string | null; is_married_in: boolean; father_id: number | null; spouse_id: number | null }[]
   >([]);
 
   // 新增表单状态
