@@ -74,7 +74,7 @@ export function FamilyForceGraph({ data }: ForceGraphProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightedId, setHighlightedId] = useState<number | null>(null);
   // 新增：搜索结果列表和当前索引
-  const [searchResults, setSearchResults] = useState<FamilyMemberNode[]>([]);
+  const [searchResults, setSearchResults] = useState<GraphNode[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);

@@ -16,14 +16,18 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  syntheticEmailFromUsername,
+  validateUsernameForRegister,
+} from "@/lib/auth/account-username";
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  const prefillEmail = process.env.NEXT_PUBLIC_LOGIN_EMAIL ?? "";
+  const prefillUsername = process.env.NEXT_PUBLIC_LOGIN_USERNAME ?? "";
   const prefillPassword = process.env.NEXT_PUBLIC_LOGIN_PASSWORD ?? "";
-  const [email, setEmail] = useState(prefillEmail);
+  const [username, setUsername] = useState(prefillUsername);
   const [password, setPassword] = useState(prefillPassword);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -35,9 +39,16 @@ export function LoginForm({
     setIsLoading(true);
     setError(null);
 
+    const uCheck = validateUsernameForRegister(username);
+    if (!uCheck.ok) {
+      setError(uCheck.error);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: syntheticEmailFromUsername(uCheck.username),
         password,
       });
       if (error) throw error;
@@ -55,22 +66,21 @@ export function LoginForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">登录</CardTitle>
-          <CardDescription>
-            请输入您的邮箱登录账户
-          </CardDescription>
+          <CardDescription>请输入账户名与密码登录</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="email">邮箱</Label>
+                <Label htmlFor="username">账户名</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
+                  id="username"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="字母或下划线开头，可含数字"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">

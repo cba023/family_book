@@ -1,19 +1,14 @@
-// 本地模式 - 不使用 Supabase
+"use client";
 
-// 模拟用户
-const MOCK_USER = {
-  id: "local-user",
-  email: "admin@local.com",
-};
+import { createBrowserClient } from "@supabase/ssr";
 
-/**
- * 本地模式下的模拟客户端
- */
 export function createClient() {
-  return {
-    auth: {
-      getUser: async () => ({ data: { user: MOCK_USER }, error: null }),
-      signOut: async () => ({ error: null }),
-    },
-  };
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "缺少 NEXT_PUBLIC_SUPABASE_URL 或 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY，请配置 .env 并启动本地 Supabase（npx supabase start）。",
+    );
+  }
+  return createBrowserClient(url, key);
 }

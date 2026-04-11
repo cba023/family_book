@@ -16,7 +16,12 @@ services:
       - ./backups:/app/backups
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-刘}
+      - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-陈}
+      # 本机 Supabase CLI（npx supabase start）API 默认 54321；容器内访问宿主机请配合 extra_hosts
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-http://host.docker.internal:54321}
+      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
@@ -43,7 +48,11 @@ services:
       - ./backups:/app/backups
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-刘}
+      - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-陈}
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-http://host.docker.internal:54321}
+      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: npm run dev
     profiles:
       - dev

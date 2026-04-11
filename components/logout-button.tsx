@@ -1,25 +1,40 @@
 "use client";
 
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 interface LogoutButtonProps {
   className?: string;
 }
 
-/**
- * 本地模式登出按钮（实际不执行任何操作）
- */
 export function LogoutButton({ className }: LogoutButtonProps) {
-  // 本地模式下登出按钮不执行任何操作
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  const handleSignOut = async () => {
+    setLoading(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      router.push("/auth/login");
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <Button 
-      onClick={() => {}} 
+    <Button
+      onClick={handleSignOut}
       className={cn(className)}
       variant="outline"
       size="sm"
+      disabled={loading}
     >
-      本地模式
+      {loading ? "退出中…" : "退出登录"}
     </Button>
   );
 }

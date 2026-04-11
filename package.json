@@ -9,7 +9,10 @@
     "start": "next start",
     "db:migrate": "tsx scripts/migrate-from-supabase.ts",
     "db:backup": "tsx scripts/backup.ts",
-    "db:restore": "tsx scripts/restore.ts"
+    "db:restore": "tsx scripts/restore.ts",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:db:reset": "supabase db reset"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8",

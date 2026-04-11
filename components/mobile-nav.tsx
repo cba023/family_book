@@ -11,7 +11,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-export function MobileNav({ children }: { children: React.ReactNode }) {
+export function MobileNav({
+  children,
+  isAdmin = false,
+  isSuperAdmin = false,
+}: {
+  children: React.ReactNode;
+  /** super_admin / admin：成员列表 */
+  isAdmin?: boolean;
+  isSuperAdmin?: boolean;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -26,11 +35,20 @@ export function MobileNav({ children }: { children: React.ReactNode }) {
             家族博客
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/family-tree" className="w-full cursor-pointer">
-            成员列表
-          </Link>
-        </DropdownMenuItem>
+        {isAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/family-tree" className="w-full cursor-pointer">
+              成员列表
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {isSuperAdmin && (
+          <DropdownMenuItem asChild>
+            <Link href="/family-tree/settings/users" className="w-full cursor-pointer">
+              用户管理
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href="/family-tree/graph" className="w-full cursor-pointer">
             族谱视图

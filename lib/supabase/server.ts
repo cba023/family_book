@@ -1,28 +1,31 @@
-// 本地模式 - 不使用 Supabase
+import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-// 模拟用户会话（本地模式使用固定用户）
-const MOCK_USER = {
-  id: "local-user",
-  email: "admin@local.com",
-};
-
-/**
- * 本地模式下的模拟客户端
- * 不连接 Supabase，直接返回模拟数据
- */
 export async function createClient() {
-  // 返回模拟的 supabase 客户端
-  return {
-    auth: {
-      getClaims: async () => ({ data: { claims: MOCK_USER }, error: null }),
-      getUser: async () => ({ data: { user: MOCK_USER }, error: null }),
-      signOut: async () => ({ error: null }),
-    },
-  };
-}
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "缺少 Supabase 环境变量。本地开发请运行 npx supabase start 并将输出中的 URL 与 anon key 写入 .env。",
+    );
+  }
 
-// 检查是否配置了 Supabase 环境变量
-export function hasEnvVars(): boolean {
-  return false; // 本地模式返回 false
+  const cookieStore = await cookies();
+
+  return createServerClient(url, key, {
+    cookies: {
+      getAll() {
+        return cookieStore.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
+        } catch {
+          // Server Component 中 set cookie 可能无效，由 Middleware 刷新会话
+        }
+      },
+    },
+  });
 }

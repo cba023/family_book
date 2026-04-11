@@ -34,7 +34,7 @@ docker run -d \
   -p 3000:3000 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/backups:/app/backups \
-  -e NEXT_PUBLIC_FAMILY_SURNAME="刘" \
+  -e NEXT_PUBLIC_FAMILY_SURNAME="陈" \
   --restart unless-stopped \
   genealogy:latest
 ```
@@ -59,7 +59,7 @@ pure-genealogy/
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `NEXT_PUBLIC_FAMILY_SURNAME` | 刘 | 家族姓氏 |
+| `NEXT_PUBLIC_FAMILY_SURNAME` | 陈 | 家族姓氏 |
 | `NODE_ENV` | production | 运行环境 |
 
 ### 数据持久化

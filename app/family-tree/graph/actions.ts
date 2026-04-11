@@ -1,6 +1,7 @@
 "use server";
 
-import { db } from "@/lib/db";
+import { requireUser, numId } from "@/lib/auth/session";
+import { formatActionError } from "@/lib/format-action-error";
 
 export interface FamilyMemberNode {
   id: number;
@@ -26,75 +27,127 @@ export interface FetchGraphResult {
 }
 
 export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
+  const { supabase, user, error: authError } = await requireUser();
+  if (!user) {
+    return { data: [], error: authError };
+  }
+
   try {
-    // 只查询非嫁入的成员（家族男性成员和未嫁入的女性）
-    const data = db.prepare(`
-      SELECT id, name, generation, sibling_order, father_id, gender,
-             official_position, is_alive, spouse_id, is_married_in, remarks, birthday,
-             death_date, residence_place
-      FROM family_members
-      WHERE is_married_in = 0 OR is_married_in IS NULL
-      ORDER BY generation ASC, sibling_order ASC
-    `).all() as any[];
+    const { data, error } = await supabase
+      .from("family_members")
+      .select(
+        "id, name, generation, sibling_order, father_id, gender, official_position, is_alive, spouse_id, is_married_in, remarks, birthday, death_date, residence_place",
+      )
+      .eq("is_married_in", false)
+      .order("generation", { ascending: true, nullsFirst: true })
+      .order("sibling_order", { ascending: true, nullsFirst: true });
 
-    // 获取所有配偶ID
-    const spouseIds = data
+    if (error) throw error;
+
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const spouseIds = rows
       .map((item) => item.spouse_id)
-      .filter((id): id is number => id !== null);
+      .filter((id): id is number | string => id != null)
+      .map(numId);
 
-    // 批量查询配偶姓名
     let spouseMap: Record<number, string> = {};
     if (spouseIds.length > 0) {
-      const placeholders = spouseIds.map(() => '?').join(',');
-      const spouses = db.prepare(
-        `SELECT id, name FROM family_members WHERE id IN (${placeholders})`
-      ).all(...spouseIds) as any[];
-
-      spouseMap = Object.fromEntries(spouses.map((s) => [s.id, s.name]));
+      const { data: spouses, error: se } = await supabase
+        .from("family_members")
+        .select("id,name")
+        .in("id", spouseIds);
+      if (se) throw se;
+      spouseMap = Object.fromEntries(
+        (spouses ?? []).map((s) => [numId(s.id), String(s.name)]),
+      );
     }
 
-    // 转换数据格式
-    const transformedData: FamilyMemberNode[] = data.map((item) => ({
-      ...item,
-      is_alive: item.is_alive === 1,
-      is_married_in: item.is_married_in === 1,
-      spouse_name: item.spouse_id ? spouseMap[item.spouse_id] || null : null,
-    }));
+    const transformedData: FamilyMemberNode[] = rows.map((item) => {
+      const sid = item.spouse_id != null ? numId(item.spouse_id) : null;
+      return {
+        id: numId(item.id),
+        name: String(item.name),
+        generation: item.generation != null ? Number(item.generation) : null,
+        sibling_order:
+          item.sibling_order != null ? Number(item.sibling_order) : null,
+        father_id: item.father_id != null ? numId(item.father_id) : null,
+        gender: (item.gender as FamilyMemberNode["gender"]) ?? null,
+        official_position:
+          item.official_position != null ? String(item.official_position) : null,
+        is_alive: Boolean(item.is_alive),
+        spouse_id: sid,
+        spouse_name: sid ? spouseMap[sid] ?? null : null,
+        is_married_in: Boolean(item.is_married_in),
+        remarks: item.remarks != null ? String(item.remarks) : null,
+        birthday: item.birthday != null ? String(item.birthday) : null,
+        death_date: item.death_date != null ? String(item.death_date) : null,
+        residence_place:
+          item.residence_place != null ? String(item.residence_place) : null,
+      };
+    });
 
     return { data: transformedData, error: null };
   } catch (error) {
     console.error("Error fetching family members for graph:", error);
-    return { data: [], error: error instanceof Error ? error.message : "未知错误" };
+    return {
+      data: [],
+      error: formatActionError(error),
+    };
   }
 }
 
-// 根据ID获取单个成员（包括嫁入的成员）
-export async function fetchMemberById(id: number): Promise<FamilyMemberNode | null> {
-  try {
-    const data = db.prepare(`
-      SELECT id, name, generation, sibling_order, father_id, gender,
-             official_position, is_alive, spouse_id, is_married_in, remarks, birthday,
-             death_date, residence_place
-      FROM family_members
-      WHERE id = ?
-    `).get(id) as any;
+export async function fetchMemberById(
+  id: number,
+): Promise<FamilyMemberNode | null> {
+  const { supabase, user, error: authError } = await requireUser();
+  if (!user) {
+    console.error("fetchMemberById graph:", authError);
+    return null;
+  }
 
+  try {
+    const { data, error } = await supabase
+      .from("family_members")
+      .select(
+        "id, name, generation, sibling_order, father_id, gender, official_position, is_alive, spouse_id, is_married_in, remarks, birthday, death_date, residence_place",
+      )
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw error;
     if (!data) return null;
 
-    // 查询配偶姓名
+    const item = data as Record<string, unknown>;
     let spouse_name: string | null = null;
-    if (data.spouse_id) {
-      const spouse = db.prepare(`
-        SELECT name FROM family_members WHERE id = ?
-      `).get(data.spouse_id) as any;
-      spouse_name = spouse?.name || null;
+    if (item.spouse_id != null) {
+      const { data: spouse } = await supabase
+        .from("family_members")
+        .select("name")
+        .eq("id", numId(item.spouse_id))
+        .maybeSingle();
+      spouse_name = spouse?.name != null ? String(spouse.name) : null;
     }
 
+    const sid = item.spouse_id != null ? numId(item.spouse_id) : null;
     return {
-      ...data,
-      is_alive: data.is_alive === 1,
-      is_married_in: data.is_married_in === 1,
+      id: numId(item.id),
+      name: String(item.name),
+      generation: item.generation != null ? Number(item.generation) : null,
+      sibling_order:
+        item.sibling_order != null ? Number(item.sibling_order) : null,
+      father_id: item.father_id != null ? numId(item.father_id) : null,
+      gender: (item.gender as FamilyMemberNode["gender"]) ?? null,
+      official_position:
+        item.official_position != null ? String(item.official_position) : null,
+      is_alive: Boolean(item.is_alive),
+      spouse_id: sid,
       spouse_name,
+      is_married_in: Boolean(item.is_married_in),
+      remarks: item.remarks != null ? String(item.remarks) : null,
+      birthday: item.birthday != null ? String(item.birthday) : null,
+      death_date: item.death_date != null ? String(item.death_date) : null,
+      residence_place:
+        item.residence_place != null ? String(item.residence_place) : null,
     };
   } catch (error) {
     console.error("Error fetching member by id:", error);

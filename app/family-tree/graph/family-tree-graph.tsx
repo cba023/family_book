@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState, useRef, useEffect, memo, type MouseEvent } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   ReactFlow,
   Controls,
@@ -1014,13 +1013,15 @@ export function FamilyTreeGraph({ initialData }: FamilyTreeGraphProps) {
   // 处理配偶点击 - 需要查询所有成员（包括嫁入的）
   const handleSpouseClick = useCallback(async (spouseId: number) => {
     // 首先在当前数据中查找
-    let spouse = initialData.find((m) => m.id === spouseId);
+    let spouse: FamilyMemberNode | null | undefined = initialData.find(
+      (m) => m.id === spouseId,
+    );
 
     // 如果找不到（嫁入的成员不在 initialData 中），需要额外查询
     if (!spouse) {
       try {
         const { fetchMemberById } = await import("./actions");
-        spouse = await fetchMemberById(spouseId);
+        spouse = (await fetchMemberById(spouseId)) ?? undefined;
       } catch (error) {
         console.error("Error fetching spouse:", error);
       }

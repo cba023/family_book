@@ -15,12 +15,20 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  syntheticEmailFromUsername,
+  validateOptionalFullName,
+  validateOptionalPhone,
+  validateUsernameForRegister,
+} from "@/lib/auth/account-username";
 
 export function SignUpForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -39,11 +47,37 @@ export function SignUpForm({
       return;
     }
 
+    const uCheck = validateUsernameForRegister(username);
+    if (!uCheck.ok) {
+      setError(uCheck.error);
+      setIsLoading(false);
+      return;
+    }
+    const fnCheck = validateOptionalFullName(fullName);
+    if (!fnCheck.ok) {
+      setError(fnCheck.error);
+      setIsLoading(false);
+      return;
+    }
+    const phCheck = validateOptionalPhone(phone);
+    if (!phCheck.ok) {
+      setError(phCheck.error);
+      setIsLoading(false);
+      return;
+    }
+
+    const data = {
+      username: uCheck.username,
+      full_name: fnCheck.value ?? "",
+      phone: phCheck.value ?? "",
+    };
+
     try {
       const { error } = await supabase.auth.signUp({
-        email,
+        email: syntheticEmailFromUsername(uCheck.username),
         password,
         options: {
+          data,
           emailRedirectTo: `${window.location.origin}/`,
         },
       });
@@ -61,20 +95,44 @@ export function SignUpForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">注册</CardTitle>
-          <CardDescription>创建一个新账户</CardDescription>
+          <CardDescription>
+            账户名用于登录，系统不要求、也不收集真实邮箱
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="email">邮箱</Label>
+                <Label htmlFor="username">账户名</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
+                  id="username"
+                  type="text"
+                  autoComplete="username"
+                  placeholder="字母或下划线开头，2～32 位"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="full-name">姓名（选填）</Label>
+                <Input
+                  id="full-name"
+                  type="text"
+                  autoComplete="name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="phone">手机号（选填）</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  autoComplete="tel"
+                  placeholder="11 位中国大陆号码"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">

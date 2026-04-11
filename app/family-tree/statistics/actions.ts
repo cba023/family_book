@@ -1,6 +1,7 @@
 "use server";
 
-import { db } from "@/lib/db";
+import { requireUser, numId } from "@/lib/auth/session";
+import { formatActionError } from "@/lib/format-action-error";
 
 export interface StatisticsData {
   totalMembers: number;
@@ -16,23 +17,38 @@ export async function fetchFamilyStatistics(): Promise<{
   data: StatisticsData | null;
   error: string | null;
 }> {
+  const { supabase, user, error: authError } = await requireUser();
+  if (!user) {
+    return { data: null, error: authError };
+  }
+
   try {
-    const members = db.prepare(`
-      SELECT id, name, gender, generation, is_alive, birthday, is_married_in
-      FROM family_members
-      ORDER BY generation ASC
-    `).all() as any[];
+    const { data, error } = await supabase
+      .from("family_members")
+      .select("id, name, gender, generation, is_alive, birthday, is_married_in")
+      .order("generation", { ascending: true, nullsFirst: true });
+
+    if (error) throw error;
+
+    const members = (data ?? []).map((m) => ({
+      id: numId(m.id),
+      name: String(m.name),
+      gender: m.gender != null ? String(m.gender) : null,
+      generation: m.generation != null ? Number(m.generation) : null,
+      is_alive: Boolean(m.is_alive),
+      birthday: m.birthday != null ? String(m.birthday) : null,
+      is_married_in: Boolean(m.is_married_in),
+    }));
 
     const totalMembers = members.length;
 
-    // 1. 性别统计
     const genderCounts = members.reduce(
       (acc, member) => {
         const gender = member.gender || "未知";
         acc[gender] = (acc[gender] || 0) + 1;
         return acc;
       },
-      {} as Record<string, number>
+      {} as Record<string, number>,
     );
 
     const genderStats = [
@@ -47,21 +63,20 @@ export async function fetchFamilyStatistics(): Promise<{
       });
     }
 
-    // 2. 世代统计
     const generationCounts = members.reduce(
       (acc, member) => {
         const gen = member.generation ? `第${member.generation}世` : "未知";
         acc[gen] = (acc[gen] || 0) + 1;
         return acc;
       },
-      {} as Record<string, number>
+      {} as Record<string, number>,
     );
 
     const sortedGenerations = Object.keys(generationCounts).sort((a, b) => {
       if (a === "未知") return 1;
       if (b === "未知") return -1;
-      const genA = parseInt(a.replace(/\D/g, ""));
-      const genB = parseInt(b.replace(/\D/g, ""));
+      const genA = parseInt(a.replace(/\D/g, ""), 10);
+      const genB = parseInt(b.replace(/\D/g, ""), 10);
       return genA - genB;
     });
 
@@ -70,14 +85,13 @@ export async function fetchFamilyStatistics(): Promise<{
       value: generationCounts[gen],
     }));
 
-    // 3. 状态统计（在世 vs 已故）
     const statusCounts = members.reduce(
       (acc, member) => {
         const status = member.is_alive ? "在世" : "已故";
         acc[status] = (acc[status] || 0) + 1;
         return acc;
       },
-      {} as Record<string, number>
+      {} as Record<string, number>,
     );
 
     const statusStats = [
@@ -85,7 +99,6 @@ export async function fetchFamilyStatistics(): Promise<{
       { name: "已故", value: statusCounts["已故"] || 0, fill: "#64748b" },
     ];
 
-    // 4. 年龄统计（在世且有出生日期）
     const now = new Date();
     const ageGroups: Record<string, number> = {
       "0-10岁": 0,
@@ -98,7 +111,7 @@ export async function fetchFamilyStatistics(): Promise<{
       "71-80岁": 0,
       "81-90岁": 0,
       "90岁以上": 0,
-      "未知": 0,
+      未知: 0,
     };
 
     members.forEach((member) => {
@@ -123,10 +136,9 @@ export async function fetchFamilyStatistics(): Promise<{
     });
 
     const ageStats = Object.entries(ageGroups)
-      .filter(([_, value]) => value > 0)
+      .filter(([, value]) => value > 0)
       .map(([name, value]) => ({ name, value }));
 
-    // 5. 常见字辈统计（取名字第一个字）
     const nameCounts: Record<string, number> = {};
     members.forEach((member) => {
       if (member.name && member.name.length > 0) {
@@ -140,14 +152,13 @@ export async function fetchFamilyStatistics(): Promise<{
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
 
-    // 6. 嫁入统计
     const marriedInCounts = members.reduce(
       (acc, member) => {
-        const isMarriedIn = member.is_married_in === 1;
-        acc[isMarriedIn ? "嫁入" : "本族"] = (acc[isMarriedIn ? "嫁入" : "本族"] || 0) + 1;
+        const key = member.is_married_in ? "嫁入" : "本族";
+        acc[key] = (acc[key] || 0) + 1;
         return acc;
       },
-      {} as Record<string, number>
+      {} as Record<string, number>,
     );
 
     const marriedInStats = [
@@ -169,6 +180,9 @@ export async function fetchFamilyStatistics(): Promise<{
     };
   } catch (error) {
     console.error("Error fetching statistics:", error);
-    return { data: null, error: error instanceof Error ? error.message : "未知错误" };
+    return {
+      data: null,
+      error: formatActionError(error),
+    };
   }
 }

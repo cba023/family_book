@@ -1,6 +1,7 @@
 "use server";
 
-import { db } from "@/lib/db";
+import { requireUser, requireAdmin, numId } from "@/lib/auth/session";
+import { formatActionError } from "@/lib/format-action-error";
 import { revalidatePath } from "next/cache";
 
 export interface FamilyMember {
@@ -29,78 +30,115 @@ export interface FetchMembersResult {
   error: string | null;
 }
 
+function mapMemberRow(
+  item: Record<string, unknown>,
+  fatherMap: Record<number, string>,
+  spouseMap: Record<number, string>,
+): FamilyMember {
+  const id = numId(item.id);
+  const fid = item.father_id != null ? numId(item.father_id) : null;
+  const sid = item.spouse_id != null ? numId(item.spouse_id) : null;
+  return {
+    id,
+    name: String(item.name),
+    generation: item.generation != null ? Number(item.generation) : null,
+    sibling_order: item.sibling_order != null ? Number(item.sibling_order) : null,
+    father_id: fid,
+    father_name: fid ? fatherMap[fid] ?? null : null,
+    gender: (item.gender as FamilyMember["gender"]) ?? null,
+    official_position: item.official_position != null ? String(item.official_position) : null,
+    is_alive: Boolean(item.is_alive),
+    spouse_id: sid,
+    spouse_name: sid ? spouseMap[sid] ?? null : null,
+    is_married_in: Boolean(item.is_married_in),
+    remarks: item.remarks != null ? String(item.remarks) : null,
+    birthday: item.birthday != null ? String(item.birthday) : null,
+    death_date: item.death_date != null ? String(item.death_date) : null,
+    residence_place: item.residence_place != null ? String(item.residence_place) : null,
+    updated_at:
+      item.updated_at != null ? String(item.updated_at) : new Date().toISOString(),
+  };
+}
+
 export async function fetchFamilyMembers(
   page: number = 1,
   pageSize: number = 50,
-  searchQuery: string = ""
+  searchQuery: string = "",
 ): Promise<FetchMembersResult> {
+  const { supabase, user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { data: [], count: 0, error: authError };
+  }
+
   try {
     const offset = (page - 1) * pageSize;
 
-    // 构建查询条件
-    let whereClause = "";
-    const params: any[] = [];
-    if (searchQuery.trim()) {
-      whereClause = "WHERE name LIKE ?";
-      params.push(`%${searchQuery.trim()}%`);
+    let q = supabase
+      .from("family_members")
+      .select("*", { count: "exact" });
+
+    const term = searchQuery.trim();
+    if (term) {
+      q = q.ilike("name", `%${term}%`);
     }
 
-    // 获取总数
-    const countResult = db.prepare(
-      `SELECT COUNT(*) as count FROM family_members ${whereClause}`
-    ).get(...params) as { count: number };
+    const { data, error, count } = await q
+      .order("generation", { ascending: true, nullsFirst: true })
+      .order("sibling_order", { ascending: true, nullsFirst: true })
+      .range(offset, offset + pageSize - 1);
 
-    // 获取分页数据
-    const data = db.prepare(`
-      SELECT * FROM family_members 
-      ${whereClause}
-      ORDER BY generation ASC, sibling_order ASC
-      LIMIT ? OFFSET ?
-    `).all(...params, pageSize, offset) as any[];
+    if (error) throw error;
 
-    // 获取所有父亲 ID 和配偶 ID
-    const fatherIds = data
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const fatherIds = rows
       .map((item) => item.father_id)
-      .filter((id): id is number => id !== null);
-    const spouseIds = data
+      .filter((id): id is number | string => id != null)
+      .map(numId);
+    const spouseIds = rows
       .map((item) => item.spouse_id)
-      .filter((id): id is number => id !== null);
+      .filter((id): id is number | string => id != null)
+      .map(numId);
 
-    // 批量查询父亲姓名
     let fatherMap: Record<number, string> = {};
     if (fatherIds.length > 0) {
-      const placeholders = fatherIds.map(() => '?').join(',');
-      const fathers = db.prepare(
-        `SELECT id, name FROM family_members WHERE id IN (${placeholders})`
-      ).all(...fatherIds) as any[];
-
-      fatherMap = Object.fromEntries(fathers.map((f) => [f.id, f.name]));
+      const { data: fathers, error: fe } = await supabase
+        .from("family_members")
+        .select("id,name")
+        .in("id", fatherIds);
+      if (fe) throw fe;
+      fatherMap = Object.fromEntries(
+        (fathers ?? []).map((f) => [numId(f.id), String(f.name)]),
+      );
     }
 
-    // 批量查询配偶姓名
     let spouseMap: Record<number, string> = {};
     if (spouseIds.length > 0) {
-      const placeholders = spouseIds.map(() => '?').join(',');
-      const spouses = db.prepare(
-        `SELECT id, name FROM family_members WHERE id IN (${placeholders})`
-      ).all(...spouseIds) as any[];
-
-      spouseMap = Object.fromEntries(spouses.map((s) => [s.id, s.name]));
+      const { data: spouses, error: se } = await supabase
+        .from("family_members")
+        .select("id,name")
+        .in("id", spouseIds);
+      if (se) throw se;
+      spouseMap = Object.fromEntries(
+        (spouses ?? []).map((s) => [numId(s.id), String(s.name)]),
+      );
     }
 
-    // 转换数据格式
-    const transformedData: FamilyMember[] = data.map((item) => ({
-      ...item,
-      is_alive: item.is_alive === 1,
-      is_married_in: item.is_married_in === 1,
-      father_name: item.father_id ? fatherMap[item.father_id] || null : null,
-      spouse_name: item.spouse_id ? spouseMap[item.spouse_id] || null : null,
-    }));
+    const transformedData = rows.map((item) =>
+      mapMemberRow(item, fatherMap, spouseMap),
+    );
 
-    return { data: transformedData, count: countResult.count, error: null };
+    return {
+      data: transformedData,
+      count: count ?? 0,
+      error: null,
+    };
   } catch (error) {
     console.error("Error fetching family members:", error);
-    return { data: [], count: 0, error: error instanceof Error ? error.message : "未知错误" };
+    return {
+      data: [],
+      count: 0,
+      error: formatActionError(error),
+    };
   }
 }
 
@@ -121,88 +159,122 @@ export interface CreateMemberInput {
 }
 
 export async function createFamilyMember(
-  input: CreateMemberInput
+  input: CreateMemberInput,
 ): Promise<{ success: boolean; error: string | null }> {
-  const transaction = db.transaction(() => {
-    // 1. 插入新成员
-    const result = db.prepare(`
-      INSERT INTO family_members (
-        name, generation, sibling_order, father_id, gender,
-        official_position, is_alive, spouse_id, is_married_in, remarks, birthday,
-        death_date, residence_place, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(
-      input.name,
-      input.generation ?? null,
-      input.sibling_order ?? null,
-      input.father_id ?? null,
-      input.gender ?? null,
-      input.official_position ?? null,
-      input.is_alive ?? true ? 1 : 0,
-      input.spouse_id ?? null,
-      input.is_married_in ? 1 : 0,
-      input.remarks ?? null,
-      input.birthday ?? null,
-      input.death_date ?? null,
-      input.residence_place ?? null
-    );
-
-    const newMemberId = result.lastInsertRowid as number;
-
-    // 2. 如果指定了配偶，双向关联
-    if (input.spouse_id) {
-      // 更新配偶的 spouse_id 指向新成员
-      db.prepare(`
-        UPDATE family_members SET spouse_id = ?, updated_at = datetime('now') WHERE id = ?
-      `).run(newMemberId, input.spouse_id);
-    }
-
-    return newMemberId;
-  });
+  const { supabase, user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { success: false, error: authError };
+  }
 
   try {
-    transaction();
+    const alive = input.is_alive ?? true;
+    const { data: inserted, error: insErr } = await supabase
+      .from("family_members")
+      .insert({
+        user_id: user.id,
+        name: input.name,
+        generation: input.generation ?? null,
+        sibling_order: input.sibling_order ?? null,
+        father_id: input.father_id ?? null,
+        gender: input.gender ?? null,
+        official_position: input.official_position ?? null,
+        is_alive: alive,
+        spouse_id: input.spouse_id ?? null,
+        is_married_in: Boolean(input.is_married_in),
+        remarks: input.remarks ?? null,
+        birthday: input.birthday ?? null,
+        death_date: input.death_date ?? null,
+        residence_place: input.residence_place ?? null,
+      })
+      .select("id")
+      .single();
+
+    if (insErr) throw insErr;
+    const newMemberId = numId(inserted.id);
+
+    if (input.spouse_id) {
+      const { error: upErr } = await supabase
+        .from("family_members")
+        .update({
+          spouse_id: newMemberId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.spouse_id);
+      if (upErr) throw upErr;
+    }
+
     revalidatePath("/family-tree", "layout");
     return { success: true, error: null };
   } catch (error) {
     console.error("Error creating family member:", error);
-    return { success: false, error: error instanceof Error ? error.message : "未知错误" };
+    return {
+      success: false,
+      error: formatActionError(error),
+    };
   }
 }
 
 export async function deleteFamilyMembers(
-  ids: number[]
+  ids: number[],
 ): Promise<{ success: boolean; error: string | null }> {
+  const { supabase, user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { success: false, error: authError };
+  }
+
   if (ids.length === 0) {
     return { success: false, error: "没有选择要删除的成员" };
   }
 
   try {
-    const placeholders = ids.map(() => '?').join(',');
-    db.prepare(`DELETE FROM family_members WHERE id IN (${placeholders})`).run(...ids);
+    const { error } = await supabase.from("family_members").delete().in("id", ids);
+    if (error) throw error;
 
     revalidatePath("/family-tree", "layout");
     return { success: true, error: null };
   } catch (error) {
     console.error("Error deleting family members:", error);
-    return { success: false, error: error instanceof Error ? error.message : "未知错误" };
+    return {
+      success: false,
+      error: formatActionError(error),
+    };
   }
 }
 
-// 获取所有成员用于父亲选择下拉框
 export async function fetchAllMembersForSelect(): Promise<
-  { id: number; name: string; generation: number | null; gender: string | null; is_married_in: boolean; father_id: number | null; spouse_id: number | null }[]
+  {
+    id: number;
+    name: string;
+    generation: number | null;
+    gender: string | null;
+    is_married_in: boolean;
+    father_id: number | null;
+    spouse_id: number | null;
+  }[]
 > {
-  try {
-    const members = db.prepare(`
-      SELECT id, name, generation, gender, is_married_in, father_id, spouse_id
-      FROM family_members
-      ORDER BY generation ASC, name ASC
-    `).all() as any[];
+  const { supabase, user, error: authError } = await requireAdmin();
+  if (!user) {
+    console.error("fetchAllMembersForSelect:", authError);
+    return [];
+  }
 
-    return members.map(m => ({
-      ...m,
-      is_married_in: m.is_married_in === 1
+  try {
+    const { data, error } = await supabase
+      .from("family_members")
+      .select("id, name, generation, gender, is_married_in, father_id, spouse_id")
+      .order("generation", { ascending: true, nullsFirst: true })
+      .order("name", { ascending: true });
+
+    if (error) throw error;
+
+    return (data ?? []).map((m) => ({
+      id: numId(m.id),
+      name: String(m.name),
+      generation: m.generation != null ? Number(m.generation) : null,
+      gender: m.gender != null ? String(m.gender) : null,
+      is_married_in: Boolean(m.is_married_in),
+      father_id: m.father_id != null ? numId(m.father_id) : null,
+      spouse_id: m.spouse_id != null ? numId(m.spouse_id) : null,
     }));
   } catch (error) {
     console.error("Error fetching members for select:", error);
@@ -214,27 +286,65 @@ export interface UpdateMemberInput extends CreateMemberInput {
   id: number;
 }
 
-// 获取时间轴所需的所有成员数据
 export async function fetchMembersForTimeline(): Promise<FamilyMember[]> {
+  const { supabase, user, error: authError } = await requireUser();
+  if (!user) {
+    console.error("fetchMembersForTimeline:", authError);
+    return [];
+  }
+
   try {
-    const members = db.prepare(`
-      SELECT * FROM family_members ORDER BY generation ASC, sibling_order ASC
-    `).all() as any[];
+    const { data, error } = await supabase
+      .from("family_members")
+      .select("*")
+      .order("generation", { ascending: true, nullsFirst: true })
+      .order("sibling_order", { ascending: true, nullsFirst: true });
 
-    return members.map((data) => {
-      // 查询父亲姓名
-      let father_name: string | null = null;
-      if (data.father_id) {
-        const father = db.prepare(`
-          SELECT name FROM family_members WHERE id = ?
-        `).get(data.father_id) as any;
-        father_name = father?.name || null;
-      }
+    if (error) throw error;
 
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const fatherIds = rows
+      .map((r) => r.father_id)
+      .filter((id): id is number | string => id != null)
+      .map(numId);
+
+    let fatherMap: Record<number, string> = {};
+    if (fatherIds.length > 0) {
+      const { data: fathers } = await supabase
+        .from("family_members")
+        .select("id,name")
+        .in("id", fatherIds);
+      fatherMap = Object.fromEntries(
+        (fathers ?? []).map((f) => [numId(f.id), String(f.name)]),
+      );
+    }
+
+    return rows.map((item) => {
+      const fid = item.father_id != null ? numId(item.father_id) : null;
       return {
-        ...data,
-        is_alive: data.is_alive === 1,
-        father_name,
+        id: numId(item.id),
+        name: String(item.name),
+        generation: item.generation != null ? Number(item.generation) : null,
+        sibling_order:
+          item.sibling_order != null ? Number(item.sibling_order) : null,
+        father_id: fid,
+        father_name: fid ? fatherMap[fid] ?? null : null,
+        gender: (item.gender as FamilyMember["gender"]) ?? null,
+        official_position:
+          item.official_position != null ? String(item.official_position) : null,
+        is_alive: Boolean(item.is_alive),
+        spouse_id: item.spouse_id != null ? numId(item.spouse_id) : null,
+        spouse_name: null,
+        is_married_in: Boolean(item.is_married_in),
+        remarks: item.remarks != null ? String(item.remarks) : null,
+        birthday: item.birthday != null ? String(item.birthday) : null,
+        death_date: item.death_date != null ? String(item.death_date) : null,
+        residence_place:
+          item.residence_place != null ? String(item.residence_place) : null,
+        updated_at:
+          item.updated_at != null
+            ? String(item.updated_at)
+            : new Date().toISOString(),
       };
     });
   } catch (error) {
@@ -243,30 +353,58 @@ export async function fetchMembersForTimeline(): Promise<FamilyMember[]> {
   }
 }
 
-// 根据 ID 获取单个成员
-export async function fetchMemberById(
-  id: number
-): Promise<FamilyMember | null> {
+export async function fetchMemberById(id: number): Promise<FamilyMember | null> {
+  const { supabase, user, error: authError } = await requireUser();
+  if (!user) {
+    console.error("fetchMemberById:", authError);
+    return null;
+  }
+
   try {
-    const data = db.prepare(`
-      SELECT * FROM family_members WHERE id = ?
-    `).get(id) as any;
+    const { data: item, error } = await supabase
+      .from("family_members")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
 
-    if (!data) return null;
+    if (error) throw error;
+    if (!item) return null;
 
-    // 查询父亲姓名
     let father_name: string | null = null;
-    if (data.father_id) {
-      const father = db.prepare(`
-        SELECT name FROM family_members WHERE id = ?
-      `).get(data.father_id) as any;
-      father_name = father?.name || null;
+    if (item.father_id != null) {
+      const { data: father } = await supabase
+        .from("family_members")
+        .select("name")
+        .eq("id", numId(item.father_id))
+        .maybeSingle();
+      father_name = father?.name != null ? String(father.name) : null;
     }
 
+    const fid = item.father_id != null ? numId(item.father_id) : null;
     return {
-      ...data,
-      is_alive: data.is_alive === 1,
+      id: numId(item.id),
+      name: String(item.name),
+      generation: item.generation != null ? Number(item.generation) : null,
+      sibling_order:
+        item.sibling_order != null ? Number(item.sibling_order) : null,
+      father_id: fid,
       father_name,
+      gender: (item.gender as FamilyMember["gender"]) ?? null,
+      official_position:
+        item.official_position != null ? String(item.official_position) : null,
+      is_alive: Boolean(item.is_alive),
+      spouse_id: item.spouse_id != null ? numId(item.spouse_id) : null,
+      spouse_name: null,
+      is_married_in: Boolean(item.is_married_in),
+      remarks: item.remarks != null ? String(item.remarks) : null,
+      birthday: item.birthday != null ? String(item.birthday) : null,
+      death_date: item.death_date != null ? String(item.death_date) : null,
+      residence_place:
+        item.residence_place != null ? String(item.residence_place) : null,
+      updated_at:
+        item.updated_at != null
+          ? String(item.updated_at)
+          : new Date().toISOString(),
     };
   } catch (error) {
     console.error("Error fetching member by id:", error);
@@ -275,75 +413,82 @@ export async function fetchMemberById(
 }
 
 export async function updateFamilyMember(
-  input: UpdateMemberInput
+  input: UpdateMemberInput,
 ): Promise<{ success: boolean; error: string | null }> {
-  const transaction = db.transaction(() => {
-    // 1. 获取当前成员的原有配偶
-    const currentMember = db.prepare(`
-      SELECT spouse_id FROM family_members WHERE id = ?
-    `).get(input.id) as { spouse_id: number | null } | undefined;
+  const { supabase, user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { success: false, error: authError };
+  }
 
-    const oldSpouseId = currentMember?.spouse_id;
-    const newSpouseId = input.spouse_id;
+  try {
+    const { data: currentMember, error: curErr } = await supabase
+      .from("family_members")
+      .select("spouse_id")
+      .eq("id", input.id)
+      .single();
 
-    // 2. 更新当前成员
-    db.prepare(`
-      UPDATE family_members SET
-        name = ?,
-        generation = ?,
-        sibling_order = ?,
-        father_id = ?,
-        gender = ?,
-        official_position = ?,
-        is_alive = ?,
-        spouse_id = ?,
-        is_married_in = ?,
-        remarks = ?,
-        birthday = ?,
-        death_date = ?,
-        residence_place = ?,
-        updated_at = datetime('now')
-      WHERE id = ?
-    `).run(
-      input.name,
-      input.generation ?? null,
-      input.sibling_order ?? null,
-      input.father_id ?? null,
-      input.gender ?? null,
-      input.official_position ?? null,
-      input.is_alive ?? true ? 1 : 0,
-      input.spouse_id ?? null,
-      input.is_married_in ? 1 : 0,
-      input.remarks ?? null,
-      input.birthday ?? null,
-      input.death_date ?? null,
-      input.residence_place ?? null,
-      input.id
-    );
+    if (curErr) throw curErr;
 
-    // 3. 处理配偶关系的双向关联
+    const oldSpouseId =
+      currentMember?.spouse_id != null
+        ? numId(currentMember.spouse_id)
+        : null;
+    const newSpouseId = input.spouse_id ?? null;
+
+    const alive = input.is_alive ?? true;
+
+    const { error: upErr } = await supabase
+      .from("family_members")
+      .update({
+        name: input.name,
+        generation: input.generation ?? null,
+        sibling_order: input.sibling_order ?? null,
+        father_id: input.father_id ?? null,
+        gender: input.gender ?? null,
+        official_position: input.official_position ?? null,
+        is_alive: alive,
+        spouse_id: newSpouseId,
+        is_married_in: Boolean(input.is_married_in),
+        remarks: input.remarks ?? null,
+        birthday: input.birthday ?? null,
+        death_date: input.death_date ?? null,
+        residence_place: input.residence_place ?? null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", input.id);
+
+    if (upErr) throw upErr;
+
     if (newSpouseId && newSpouseId !== oldSpouseId) {
-      // 设置了新配偶，更新新配偶的 spouse_id 指向当前成员
-      db.prepare(`
-        UPDATE family_members SET spouse_id = ?, updated_at = datetime('now') WHERE id = ?
-      `).run(input.id, newSpouseId);
+      const { error: e2 } = await supabase
+        .from("family_members")
+        .update({
+          spouse_id: input.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", newSpouseId);
+      if (e2) throw e2;
     }
 
     if (oldSpouseId && oldSpouseId !== newSpouseId) {
-      // 解除了旧配偶关系，清除旧配偶的 spouse_id
-      db.prepare(`
-        UPDATE family_members SET spouse_id = NULL, updated_at = datetime('now') WHERE id = ?
-      `).run(oldSpouseId);
+      const { error: e3 } = await supabase
+        .from("family_members")
+        .update({
+          spouse_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", oldSpouseId);
+      if (e3) throw e3;
     }
-  });
 
-  try {
-    transaction();
     revalidatePath("/family-tree", "layout");
     return { success: true, error: null };
   } catch (error) {
     console.error("Error updating family member:", error);
-    return { success: false, error: error instanceof Error ? error.message : "未知错误" };
+    return {
+      success: false,
+      error: formatActionError(error),
+    };
   }
 }
 
@@ -362,86 +507,145 @@ export interface ImportMemberInput {
 }
 
 export async function batchCreateFamilyMembers(
-  members: ImportMemberInput[]
+  members: ImportMemberInput[],
 ): Promise<{ success: boolean; count: number; error: string | null }> {
+  const { supabase, user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { success: false, count: 0, error: authError };
+  }
+
   try {
-    // 1. 提取所有不为空的父亲姓名
     const fatherNames = Array.from(
       new Set(
         members
           .map((m) => m.father_name?.trim())
-          .filter((n): n is string => !!n)
-      )
+          .filter((n): n is string => !!n),
+      ),
     );
 
-    // 2. 批量查找父亲 ID
     const fatherMap: Record<string, number> = {};
     if (fatherNames.length > 0) {
-      const placeholders = fatherNames.map(() => '?').join(',');
-      const foundFathers = db.prepare(
-        `SELECT id, name FROM family_members WHERE name IN (${placeholders})`
-      ).all(...fatherNames) as any[];
-
-      foundFathers.forEach((f) => {
-        fatherMap[f.name] = f.id;
-      });
+      const { data: foundFathers, error: fe } = await supabase
+        .from("family_members")
+        .select("id,name")
+        .in("name", fatherNames);
+      if (fe) throw fe;
+      for (const f of foundFathers ?? []) {
+        fatherMap[String(f.name)] = numId(f.id);
+      }
     }
 
-    // 3. 构建插入数据
-    const insertStmt = db.prepare(`
-      INSERT INTO family_members (
-        name, generation, sibling_order, father_id, gender,
-        official_position, is_alive, spouse, remarks, birthday,
-        residence_place, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `);
+    const nameToLastId: Record<string, number> = {};
 
-    const insertMany = db.transaction((items: ImportMemberInput[]) => {
-      for (const m of items) {
-        let father_id: number | null = null;
-        if (m.father_name && fatherMap[m.father_name.trim()]) {
-          father_id = fatherMap[m.father_name.trim()];
-        }
-
-        insertStmt.run(
-          m.name,
-          m.generation ?? null,
-          m.sibling_order ?? null,
-          father_id,
-          m.gender ?? null,
-          m.official_position ?? null,
-          m.is_alive ?? true ? 1 : 0,
-          m.spouse ?? null,
-          m.remarks ?? null,
-          m.birthday ?? null,
-          m.residence_place ?? null
-        );
+    for (const m of members) {
+      let father_id: number | null = null;
+      const fn = m.father_name?.trim();
+      if (fn) {
+        father_id = fatherMap[fn] ?? nameToLastId[fn] ?? null;
       }
-    });
 
-    insertMany(members);
+      const alive = m.is_alive ?? true;
+
+      const { data: inserted, error: insErr } = await supabase
+        .from("family_members")
+        .insert({
+          user_id: user.id,
+          name: m.name,
+          generation: m.generation ?? null,
+          sibling_order: m.sibling_order ?? null,
+          father_id,
+          gender: m.gender ?? null,
+          official_position: m.official_position ?? null,
+          is_alive: alive,
+          spouse_id: null,
+          is_married_in: false,
+          remarks: m.remarks ?? null,
+          birthday: m.birthday ?? null,
+          death_date: null,
+          residence_place: m.residence_place ?? null,
+        })
+        .select("id")
+        .single();
+
+      if (insErr) throw insErr;
+      const newId = numId(inserted.id);
+      nameToLastId[m.name.trim()] = newId;
+    }
+
+    for (const m of members) {
+      const spouseName = m.spouse?.trim();
+      if (!spouseName) continue;
+
+      const selfId = nameToLastId[m.name.trim()];
+      if (!selfId) continue;
+
+      let spouseId: number | undefined = nameToLastId[spouseName];
+      if (!spouseId) {
+        const { data: row } = await supabase
+          .from("family_members")
+          .select("id")
+          .eq("name", spouseName)
+          .limit(1)
+          .maybeSingle();
+        spouseId = row ? numId(row.id) : undefined;
+      }
+      if (spouseId === undefined) continue;
+
+      const { error: e1 } = await supabase
+        .from("family_members")
+        .update({
+          spouse_id: spouseId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", selfId);
+      if (e1) throw e1;
+
+      const { error: e2 } = await supabase
+        .from("family_members")
+        .update({
+          spouse_id: selfId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", spouseId);
+      if (e2) throw e2;
+    }
 
     revalidatePath("/family-tree", "layout");
     return { success: true, count: members.length, error: null };
   } catch (error) {
     console.error("Error batch creating family members:", error);
-    return { success: false, count: 0, error: error instanceof Error ? error.message : "未知错误" };
+    return {
+      success: false,
+      count: 0,
+      error: formatActionError(error),
+    };
   }
 }
 
-// 导出数据到 JSON（用于备份）
 export async function exportFamilyMembersToJson(): Promise<{
-  data: any[];
+  data: Record<string, unknown>[];
   error: string | null;
 }> {
-  try {
-    const data = db.prepare(`
-      SELECT * FROM family_members ORDER BY generation, sibling_order
-    `).all();
+  const { supabase, user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { data: [], error: authError };
+  }
 
-    return { data, error: null };
+  try {
+    const { data, error } = await supabase
+      .from("family_members")
+      .select("*")
+      .order("generation", { ascending: true, nullsFirst: true })
+      .order("sibling_order", { ascending: true, nullsFirst: true });
+
+    if (error) throw error;
+
+    return { data: (data ?? []) as Record<string, unknown>[], error: null };
   } catch (error) {
     console.error("Error exporting family members:", error);
-    return { data: [], error: error instanceof Error ? error.message : "未知错误" };
+    return {
+      data: [],
+      error: formatActionError(error),
+    };
   }
 }

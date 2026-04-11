@@ -3,13 +3,20 @@ import Link from "next/link";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { MobileNav } from "@/components/mobile-nav";
+import { GenealogyHeaderNavLinks } from "@/components/genealogy-header-nav-links";
 import { FAMILY_SURNAME } from "@/lib/utils";
+import { getUserRole } from "@/lib/auth/session";
+import { canMaintainGenealogy } from "@/lib/auth/roles";
 
-export default function FamilyTreeLayout({
+export default async function FamilyTreeLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { user, role } = await getUserRole();
+  const canMaintain = Boolean(user && canMaintainGenealogy(role));
+  const isSuperAdmin = Boolean(user && role === "super_admin");
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* 顶部导航栏 */}
@@ -19,26 +26,10 @@ export default function FamilyTreeLayout({
             {FAMILY_SURNAME}氏族谱
           </Link>
 
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <Link href="/blog" className="hover:text-primary transition-colors">
-              家族博客
-            </Link>
-            <Link href="/family-tree" className="hover:text-primary transition-colors">
-              成员列表
-            </Link>
-            <Link href="/family-tree/graph" className="hover:text-primary transition-colors">
-              族谱视图
-            </Link>
-            <Link href="/family-tree/statistics" className="hover:text-primary transition-colors">
-              统计分析
-            </Link>
-            <Link href="/family-tree/biography-book" className="hover:text-primary transition-colors">
-              生平册
-            </Link>
-            <Link href="/family-tree/timeline" className="hover:text-primary transition-colors">
-              时间轴
-            </Link>
-          </nav>
+          <GenealogyHeaderNavLinks
+            canMaintainData={canMaintain}
+            isSuperAdmin={isSuperAdmin}
+          />
 
           <div className="flex items-center gap-4">
             <ThemeSwitcher />
@@ -47,7 +38,7 @@ export default function FamilyTreeLayout({
                 <AuthButton />
               </Suspense>
             </div>
-            <MobileNav>
+            <MobileNav isAdmin={canMaintain} isSuperAdmin={isSuperAdmin}>
               <Suspense fallback={<div className="h-9 w-full bg-muted animate-pulse rounded-md" />}>
                 <AuthButton />
               </Suspense>

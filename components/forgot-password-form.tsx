@@ -14,12 +14,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useState } from "react";
+import {
+  syntheticEmailFromUsername,
+  validateUsernameForRegister,
+} from "@/lib/auth/account-username";
 
 export function ForgotPasswordForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,11 +34,20 @@ export function ForgotPasswordForm({
     setIsLoading(true);
     setError(null);
 
+    const uCheck = validateUsernameForRegister(username);
+    if (!uCheck.ok) {
+      setError(uCheck.error);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      // The url which will be included in the email. This URL needs to be configured in your redirect URLs in the Supabase dashboard at https://supabase.com/dashboard/project/_/auth/url-configuration
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/update-password`,
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        syntheticEmailFromUsername(uCheck.username),
+        {
+          redirectTo: `${window.location.origin}/auth/update-password`,
+        },
+      );
       if (error) throw error;
       setSuccess(true);
     } catch (error: unknown) {
@@ -49,12 +62,12 @@ export function ForgotPasswordForm({
       {success ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">检查您的邮箱</CardTitle>
-            <CardDescription>密码重置说明已发送</CardDescription>
+            <CardTitle className="text-2xl">请求已提交</CardTitle>
+            <CardDescription>若项目已配置发信，将收到重置邮件</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              如果您使用邮箱和密码注册，您将收到一封密码重置邮件。
+              本地开发通常未配置 SMTP，可能不会收到邮件；可在控制台或由管理员重置密码。
             </p>
           </CardContent>
         </Card>
@@ -63,21 +76,22 @@ export function ForgotPasswordForm({
           <CardHeader>
             <CardTitle className="text-2xl">重置您的密码</CardTitle>
             <CardDescription>
-              输入您的邮箱，我们将向您发送重置密码的链接
+              输入账户名，系统将使用内部登记地址尝试发送重置链接
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleForgotPassword}>
               <div className="flex flex-col gap-6">
                 <div className="grid gap-2">
-                  <Label htmlFor="email">邮箱</Label>
+                  <Label htmlFor="username">账户名</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="m@example.com"
+                    id="username"
+                    type="text"
+                    autoComplete="username"
+                    placeholder="注册时使用的账户名"
                     required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
                   />
                 </div>
                 {error && <p className="text-sm text-red-500">{error}</p>}
