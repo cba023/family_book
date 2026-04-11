@@ -20,8 +20,8 @@ function ChartsSkeleton() {
           <CardTitle>数据概览</CardTitle>
           <CardDescription>家族成员基础数据统计</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-          {[1, 2, 3, 4].map((i) => (
+        <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+          {[1, 2, 3, 4, 5].map((i) => (
             <div key={i} className="p-4 bg-muted/50 rounded-lg animate-pulse">
               <div className="h-9 w-16 bg-muted rounded mx-auto mb-2" />
               <div className="h-4 w-12 bg-muted rounded mx-auto" />

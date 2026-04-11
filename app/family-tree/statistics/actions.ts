@@ -9,6 +9,7 @@ export interface StatisticsData {
   statusStats: { name: string; value: number; fill: string }[];
   ageStats: { name: string; value: number }[];
   commonNames: { name: string; count: number }[];
+  marriedInStats: { name: string; value: number; fill: string }[];
 }
 
 export async function fetchFamilyStatistics(): Promise<{
@@ -17,7 +18,7 @@ export async function fetchFamilyStatistics(): Promise<{
 }> {
   try {
     const members = db.prepare(`
-      SELECT id, name, gender, generation, is_alive, birthday
+      SELECT id, name, gender, generation, is_alive, birthday, is_married_in
       FROM family_members
       ORDER BY generation ASC
     `).all() as any[];
@@ -139,6 +140,21 @@ export async function fetchFamilyStatistics(): Promise<{
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
 
+    // 6. 嫁入统计
+    const marriedInCounts = members.reduce(
+      (acc, member) => {
+        const isMarriedIn = member.is_married_in === 1;
+        acc[isMarriedIn ? "嫁入" : "本族"] = (acc[isMarriedIn ? "嫁入" : "本族"] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+
+    const marriedInStats = [
+      { name: "本族", value: marriedInCounts["本族"] || 0, fill: "#3b82f6" },
+      { name: "嫁入", value: marriedInCounts["嫁入"] || 0, fill: "#f97316" },
+    ];
+
     return {
       data: {
         totalMembers,
@@ -147,6 +163,7 @@ export async function fetchFamilyStatistics(): Promise<{
         statusStats,
         ageStats,
         commonNames,
+        marriedInStats,
       },
       error: null,
     };

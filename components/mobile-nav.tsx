@@ -22,6 +22,11 @@ export function MobileNav({ children }: { children: React.ReactNode }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem asChild>
+          <Link href="/blog" className="w-full cursor-pointer">
+            家族博客
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
           <Link href="/family-tree" className="w-full cursor-pointer">
             成员列表
           </Link>
@@ -39,11 +44,6 @@ export function MobileNav({ children }: { children: React.ReactNode }) {
         <DropdownMenuItem asChild>
           <Link href="/family-tree/biography-book" className="w-full cursor-pointer">
             生平册
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/blog" className="w-full cursor-pointer">
-            家族博客
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>

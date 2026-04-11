@@ -20,6 +20,9 @@ export default function FamilyTreeLayout({
           </Link>
 
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+            <Link href="/blog" className="hover:text-primary transition-colors">
+              家族博客
+            </Link>
             <Link href="/family-tree" className="hover:text-primary transition-colors">
               成员列表
             </Link>
@@ -31,9 +34,6 @@ export default function FamilyTreeLayout({
             </Link>
             <Link href="/family-tree/biography-book" className="hover:text-primary transition-colors">
               生平册
-            </Link>
-            <Link href="/blog" className="hover:text-primary transition-colors">
-              家族博客
             </Link>
             <Link href="/family-tree/timeline" className="hover:text-primary transition-colors">
               时间轴

@@ -36,7 +36,7 @@ export function StatisticsChartsInner({ data }: StatisticsChartsInnerProps) {
                     <CardTitle>数据概览</CardTitle>
                     <CardDescription>家族成员基础数据统计</CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <CardContent className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
                     <div className="p-4 bg-muted/50 rounded-lg">
                         <div className="text-3xl font-bold">{data.totalMembers}</div>
                         <div className="text-sm text-muted-foreground">总人数</div>
@@ -52,6 +52,12 @@ export function StatisticsChartsInner({ data }: StatisticsChartsInnerProps) {
                             {data.statusStats.find((s) => s.name === "在世")?.value || 0}
                         </div>
                         <div className="text-sm text-muted-foreground">在世成员</div>
+                    </div>
+                    <div className="p-4 bg-muted/50 rounded-lg">
+                        <div className="text-3xl font-bold">
+                            {data.marriedInStats.find((m) => m.name === "嫁入")?.value || 0}
+                        </div>
+                        <div className="text-sm text-muted-foreground">嫁入成员</div>
                     </div>
                     <div className="p-4 bg-muted/50 rounded-lg">
                         <div className="text-3xl font-bold">
@@ -94,7 +100,7 @@ export function StatisticsChartsInner({ data }: StatisticsChartsInnerProps) {
                 </CardContent>
             </Card>
 
-            {/* 生死状态 */}
+            {/* 在世状态 */}
             <Card>
                 <CardHeader>
                     <CardTitle>在世状态</CardTitle>
@@ -116,6 +122,38 @@ export function StatisticsChartsInner({ data }: StatisticsChartsInnerProps) {
                                 }
                             >
                                 {data.statusStats.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                            </Pie>
+                            <Tooltip formatter={(value) => [value, "人数"]} />
+                            <Legend verticalAlign="bottom" height={36} />
+                        </PieChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
+
+            {/* 嫁入统计 */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>成员来源</CardTitle>
+                    <CardDescription>本族成员与嫁入成员比例</CardDescription>
+                </CardHeader>
+                <CardContent className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie
+                                data={data.marriedInStats}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                                label={({ name, percent }) =>
+                                    `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`
+                                }
+                            >
+                                {data.marriedInStats.map((entry, index) => (
                                     <Cell key={`cell-${index}`} fill={entry.fill} />
                                 ))}
                             </Pie>
