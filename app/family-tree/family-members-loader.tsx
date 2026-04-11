@@ -5,12 +5,14 @@ interface FamilyMembersLoaderProps {
   page: number;
   pageSize: number;
   search: string;
+  canEdit?: boolean;
 }
 
 export async function FamilyMembersLoader({
   page,
   pageSize,
   search,
+  canEdit = false,
 }: FamilyMembersLoaderProps) {
   const { data, count, error } = await fetchFamilyMembers(page, pageSize, search);
 
@@ -29,6 +31,7 @@ export async function FamilyMembersLoader({
       currentPage={page}
       pageSize={pageSize}
       searchQuery={search}
+      canEdit={canEdit}
     />
   );
 }

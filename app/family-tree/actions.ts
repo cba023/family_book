@@ -1,6 +1,6 @@
 "use server";
 
-import { requireUser, requireAdmin, numId } from "@/lib/auth/session";
+import { requireUser, requireAdmin, getUserRole, numId } from "@/lib/auth/session";
 import { formatActionError } from "@/lib/format-action-error";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -66,7 +66,8 @@ export async function fetchFamilyMembers(
   pageSize: number = 50,
   searchQuery: string = "",
 ): Promise<FetchMembersResult> {
-  const { supabase, user, error: authError } = await requireAdmin();
+  // 查询数据只需要登录，不需要管理员权限
+  const { supabase, user, error: authError } = await requireUser();
   if (!user) {
     return { data: [], count: 0, error: authError };
   }

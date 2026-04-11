@@ -22,19 +22,20 @@ export async function BlogHeader() {
         <GenealogyHeaderNavLinks
           canMaintainData={canMaintain}
           isSuperAdmin={isSuperAdmin}
-          blogActive
+          blogActive={true}
+          isLoggedIn={Boolean(user)}
         />
 
         <div className="flex items-center gap-4">
           <ThemeSwitcher />
           <div className="hidden md:block">
-            <AuthButton 
+            <AuthButton
               user={user ? { id: user.id, email: user.email } : null}
               profile={user ? { role, username: null } : null}
             />
           </div>
-          <MobileNav isAdmin={canMaintain} isSuperAdmin={isSuperAdmin}>
-            <AuthButton 
+          <MobileNav isAdmin={canMaintain} isSuperAdmin={isSuperAdmin} isLoggedIn={Boolean(user)}>
+            <AuthButton
               user={user ? { id: user.id, email: user.email } : null}
               profile={user ? { role, username: null } : null}
             />

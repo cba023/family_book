@@ -32,15 +32,17 @@ function TableSkeleton() {
 
 async function FamilyMembersWrapper({
   searchParams,
+  canEdit,
 }: {
   searchParams: Promise<{ page?: string; search?: string }>;
+  canEdit: boolean;
 }) {
   const params = await searchParams;
   const page = parseInt(params.page || "1", 10);
   const search = params.search || "";
   const pageSize = 50;
 
-  return <FamilyMembersLoader page={page} pageSize={pageSize} search={search} />;
+  return <FamilyMembersLoader page={page} pageSize={pageSize} search={search} canEdit={canEdit} />;
 }
 
 export default async function FamilyTreePage({ searchParams }: PageProps) {
@@ -48,16 +50,16 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
   if (!user) {
     redirect("/auth/login");
   }
-  if (!canMaintainGenealogy(role)) {
-    redirect("/family-tree/graph");
-  }
+  
+  // 普通用户也可以查看成员列表，但只有管理员可以编辑
+  const canEdit = canMaintainGenealogy(role);
 
   return (
     <div className="container mx-auto py-8 px-4">
       <h1 className="text-3xl font-bold mb-6">族谱成员列表</h1>
 
       <Suspense fallback={<TableSkeleton />}>
-        <FamilyMembersWrapper searchParams={searchParams} />
+        <FamilyMembersWrapper searchParams={searchParams} canEdit={canEdit} />
       </Suspense>
     </div>
   );

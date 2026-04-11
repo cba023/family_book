@@ -4,6 +4,8 @@ import { FamilyTreeGraph } from "./family-tree-graph";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Box } from "lucide-react";
+import { getUserRole } from "@/lib/auth/session";
+import { LoginPrompt } from "@/components/login-prompt";
 
 function GraphSkeleton() {
   return (
@@ -14,6 +16,16 @@ function GraphSkeleton() {
 }
 
 async function GraphLoader() {
+  const { user } = await getUserRole();
+
+  if (!user) {
+    return (
+      <div className="w-full h-[calc(100vh-300px)] min-h-[400px] flex items-center justify-center">
+        <LoginPrompt message="登录后可查看族谱关系图" />
+      </div>
+    );
+  }
+
   const { data, error } = await fetchAllFamilyMembers();
 
   if (error) {
@@ -35,17 +47,21 @@ async function GraphLoader() {
   return <FamilyTreeGraph initialData={data} />;
 }
 
-export default function FamilyTreeGraphPage() {
+export default async function FamilyTreeGraphPage() {
+  const { user } = await getUserRole();
+
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-6">
         <h1 className="text-3xl font-bold">族谱关系图</h1>
-        <Button variant="outline" asChild>
-          <Link href="/family-tree/graph-3d">
-            <Box className="mr-2 h-4 w-4" />
-            切换到 3D 视图
-          </Link>
-        </Button>
+        {user && (
+          <Button variant="outline" asChild>
+            <Link href="/family-tree/graph-3d">
+              <Box className="mr-2 h-4 w-4" />
+              切换到 3D 视图
+            </Link>
+          </Button>
+        )}
       </div>
 
       <Suspense fallback={<GraphSkeleton />}>

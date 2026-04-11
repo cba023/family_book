@@ -22,6 +22,7 @@ export async function FamilyTreeHeader() {
         <GenealogyHeaderNavLinks
           canMaintainData={canMaintain}
           isSuperAdmin={isSuperAdmin}
+          isLoggedIn={Boolean(user)}
         />
 
         <div className="flex items-center gap-4">
@@ -32,7 +33,7 @@ export async function FamilyTreeHeader() {
               profile={user ? { role, username: null } : null}
             />
           </div>
-          <MobileNav isAdmin={canMaintain} isSuperAdmin={isSuperAdmin}>
+          <MobileNav isAdmin={canMaintain} isSuperAdmin={isSuperAdmin} isLoggedIn={Boolean(user)}>
             <AuthButton
               user={user ? { id: user.id, email: user.email } : null}
               profile={user ? { role, username: null } : null}

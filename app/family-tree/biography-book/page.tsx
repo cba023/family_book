@@ -3,6 +3,7 @@ import { fetchMembersWithBiography } from "./actions";
 import { BiographyBookLoader } from "./biography-book-loader";
 import { FAMILY_SURNAME } from "@/lib/utils";
 import { LoginPrompt } from "@/components/login-prompt";
+import { getUserRole } from "@/lib/auth/session";
 
 export const metadata = {
     title: `${FAMILY_SURNAME}氏生平册`,
@@ -10,6 +11,16 @@ export const metadata = {
 };
 
 async function BookContent() {
+    const { user } = await getUserRole();
+
+    if (!user) {
+        return (
+            <div className="min-h-[calc(100vh-200px)] flex items-center justify-center">
+                <LoginPrompt message="登录后可查看家族生平事迹" />
+            </div>
+        );
+    }
+
     const { data: members, error, requireAuth } = await fetchMembersWithBiography();
 
     if (error) {

@@ -15,11 +15,14 @@ export function MobileNav({
   children,
   isAdmin = false,
   isSuperAdmin = false,
+  isLoggedIn = false,
 }: {
   children: React.ReactNode;
   /** super_admin / admin：成员列表 */
   isAdmin?: boolean;
   isSuperAdmin?: boolean;
+  /** 是否已登录 */
+  isLoggedIn?: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -35,17 +38,11 @@ export function MobileNav({
             家族博客
           </Link>
         </DropdownMenuItem>
-        {isAdmin && (
+        {/* 登录用户都可以看到成员列表 */}
+        {isLoggedIn && (
           <DropdownMenuItem asChild>
             <Link href="/family-tree" className="w-full cursor-pointer">
               成员列表
-            </Link>
-          </DropdownMenuItem>
-        )}
-        {isSuperAdmin && (
-          <DropdownMenuItem asChild>
-            <Link href="/family-tree/settings/data-maintenance" className="w-full cursor-pointer">
-              数据维护
             </Link>
           </DropdownMenuItem>
         )}

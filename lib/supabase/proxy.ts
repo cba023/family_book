@@ -48,7 +48,15 @@ export async function updateSession(request: NextRequest) {
   const user = data?.claims;
 
   // 允许匿名访问的路径
-  const publicPaths = ["/", "/blog", "/family-tree/graph", "/family-tree/graph-3d"];
+  const publicPaths = [
+    "/",
+    "/blog",
+    "/family-tree/graph",
+    "/family-tree/graph-3d",
+    "/family-tree/statistics",
+    "/family-tree/biography-book",
+    "/family-tree/timeline",
+  ];
   const isPublicPath = publicPaths.some(path => 
     request.nextUrl.pathname === path || 
     request.nextUrl.pathname.startsWith("/blog/") ||

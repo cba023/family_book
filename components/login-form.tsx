@@ -52,8 +52,8 @@ export function LoginForm({
         password,
       });
       if (error) throw error;
-      // 登录成功后重定向到族谱关系图页面
-      router.push("/family-tree/graph");
+      // 登录成功后重定向到博客页
+      router.push("/blog");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {

@@ -50,6 +50,7 @@ interface FamilyMembersTableProps {
   currentPage: number;
   pageSize: number;
   searchQuery: string;
+  canEdit?: boolean;
 }
 
 export function FamilyMembersTable({
@@ -58,6 +59,7 @@ export function FamilyMembersTable({
   currentPage,
   pageSize,
   searchQuery,
+  canEdit = false,
 }: FamilyMembersTableProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -337,24 +339,26 @@ export function FamilyMembersTable({
           </Button>
         </form>
 
-        {/* 操作按钮 */}
-        <div className="flex gap-2 flex-wrap w-full lg:w-auto">
-          <ImportMembersDialog onSuccess={() => router.refresh()} />
-          
-          <Button onClick={handleOpenAddDialog}>
-            <Plus className="h-4 w-4 mr-2" />
-            新增
-          </Button>
+        {/* 操作按钮 - 只有管理员可以编辑 */}
+        {canEdit && (
+          <div className="flex gap-2 flex-wrap w-full lg:w-auto">
+            <ImportMembersDialog onSuccess={() => router.refresh()} />
+            
+            <Button onClick={handleOpenAddDialog}>
+              <Plus className="h-4 w-4 mr-2" />
+              新增
+            </Button>
 
-          <Button
-            variant="destructive"
-            onClick={handleDelete}
-            disabled={selectedIds.size === 0 || isDeleting}
-          >
-            {isDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-            删除 {selectedIds.size > 0 && `(${selectedIds.size})`}
-          </Button>
-        </div>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={selectedIds.size === 0 || isDeleting}
+            >
+              {isDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              删除 {selectedIds.size > 0 && `(${selectedIds.size})`}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* 新增/编辑弹窗 */}
@@ -761,13 +765,15 @@ export function FamilyMembersTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={allSelected}
-                  onCheckedChange={handleSelectAll}
-                  aria-label="全选"
-                />
-              </TableHead>
+              {canEdit && (
+                <TableHead className="w-12">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="全选"
+                  />
+                </TableHead>
+              )}
               <TableHead className="w-16">ID</TableHead>
               <TableHead>姓名</TableHead>
               <TableHead className="w-20">世代</TableHead>
@@ -788,7 +794,7 @@ export function FamilyMembersTable({
           <TableBody>
             {initialData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={14} className="h-24 text-center">
+                <TableCell colSpan={canEdit ? 16 : 15} className="h-24 text-center">
                   暂无数据
                 </TableCell>
               </TableRow>
@@ -796,54 +802,64 @@ export function FamilyMembersTable({
               initialData.map((member) => (
                 <TableRow
                   key={member.id}
-                  data-state={selectedIds.has(member.id) ? "selected" : undefined}
+                  data-state={canEdit && selectedIds.has(member.id) ? "selected" : undefined}
                 >
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(member.id)}
-                      onCheckedChange={(checked) =>
-                        handleSelectOne(member.id, checked as boolean)
-                      }
-                      aria-label={`选择 ${member.name}`}
-                    />
-                  </TableCell>
+                  {canEdit && (
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(member.id)}
+                        onCheckedChange={(checked) =>
+                          handleSelectOne(member.id, checked as boolean)
+                        }
+                        aria-label={`选择 ${member.name}`}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell className="font-mono">{member.id}</TableCell>
                   <TableCell className="font-medium">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditDialog(member)}
-                      className="text-primary hover:underline cursor-pointer text-left"
-                    >
-                      {member.name}
-                    </button>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditDialog(member)}
+                        className="text-primary hover:underline cursor-pointer text-left"
+                      >
+                        {member.name}
+                      </button>
+                    ) : (
+                      <span>{member.name}</span>
+                    )}
                   </TableCell>
                   <TableCell>{member.generation ?? "-"}</TableCell>
                   <TableCell>{member.sibling_order ?? "-"}</TableCell>
                   <TableCell>
                     {member.father_id && member.father_name ? (
                       <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          disabled={loadingFatherId === member.father_id}
-                          onClick={async () => {
-                            if (!member.father_id) return;
-                            setLoadingFatherId(member.father_id);
-                            try {
-                              const fatherData = await fetchMemberById(member.father_id);
-                              if (fatherData) {
-                                handleOpenEditDialog(fatherData);
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            disabled={loadingFatherId === member.father_id}
+                            onClick={async () => {
+                              if (!member.father_id) return;
+                              setLoadingFatherId(member.father_id);
+                              try {
+                                const fatherData = await fetchMemberById(member.father_id);
+                                if (fatherData) {
+                                  handleOpenEditDialog(fatherData);
+                                }
+                              } finally {
+                                setLoadingFatherId(null);
                               }
-                            } finally {
-                              setLoadingFatherId(null);
-                            }
-                          }}
-                          className={cn(
-                            "text-primary hover:underline cursor-pointer text-left",
-                            loadingFatherId === member.father_id && "opacity-70 cursor-wait"
-                          )}
-                        >
-                          {member.father_name}
-                        </button>
+                            }}
+                            className={cn(
+                              "text-primary hover:underline cursor-pointer text-left",
+                              loadingFatherId === member.father_id && "opacity-70 cursor-wait"
+                            )}
+                          >
+                            {member.father_name}
+                          </button>
+                        ) : (
+                          <span>{member.father_name}</span>
+                        )}
                         {loadingFatherId === member.father_id && (
                           <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
                         )}

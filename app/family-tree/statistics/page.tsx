@@ -1,10 +1,26 @@
 import React, { Suspense } from "react";
 import { StatisticsContent } from "./statistics-content";
+import { getUserRole } from "@/lib/auth/session";
+import { LoginPrompt } from "@/components/login-prompt";
 
 export const metadata = {
   title: "家族统计分析",
   description: "家族成员数据统计仪表盘",
 };
+
+async function StatisticsLoader() {
+  const { user } = await getUserRole();
+
+  if (!user) {
+    return (
+      <div className="w-full h-[calc(100vh-300px)] min-h-[400px] flex items-center justify-center">
+        <LoginPrompt message="登录后可查看家族统计数据" />
+      </div>
+    );
+  }
+
+  return <StatisticsContent />;
+}
 
 export default function StatisticsPage() {
   return (
@@ -17,7 +33,7 @@ export default function StatisticsPage() {
       </div>
       
       <Suspense fallback={<div className="py-12 text-center text-muted-foreground">正在加载统计数据...</div>}>
-        <StatisticsContent />
+        <StatisticsLoader />
       </Suspense>
     </div>
   );

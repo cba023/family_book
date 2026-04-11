@@ -7,16 +7,16 @@ import { CreateUserForm } from "../users/create-user-form";
 export default async function DataMaintenancePage() {
   const gate = await requireSuperAdmin();
   if (!gate.user) {
-    redirect("/family-tree/graph");
+    redirect("/blog");
   }
 
   const { users, error } = await getManagedUsers();
 
   return (
     <div className="container mx-auto py-8 px-4 max-w-5xl">
-      <h1 className="text-2xl font-bold mb-2">数据维护</h1>
+      <h1 className="text-2xl font-bold mb-2">用户管理</h1>
       <p className="text-muted-foreground text-sm mb-8">
-        超级管理员可在此维护系统数据，包括用户账号管理和角色分配。
+        超级管理员可在此管理系统用户，包括新建账号和角色分配。
       </p>
 
       {/* 用户管理模块 */}

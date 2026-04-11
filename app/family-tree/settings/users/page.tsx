@@ -7,7 +7,7 @@ import { CreateUserForm } from "./create-user-form";
 export default async function SettingsUsersPage() {
   const gate = await requireSuperAdmin();
   if (!gate.user) {
-    redirect("/family-tree/graph");
+    redirect("/blog");
   }
 
   const { users, error } = await getManagedUsers();

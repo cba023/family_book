@@ -5,10 +5,10 @@ import { NextResponse, type NextRequest } from 'next/server'
  * 不验证登录状态，直接放行
  */
 export async function updateSession(request: NextRequest) {
-  // 首页重定向到族谱关系图
+  // 首页重定向到博客页
   if (request.nextUrl.pathname === '/') {
     const url = request.nextUrl.clone()
-    url.pathname = '/family-tree/graph'
+    url.pathname = '/blog'
     return NextResponse.redirect(url)
   }
 

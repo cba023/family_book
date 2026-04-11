@@ -5,8 +5,6 @@ import Link from "next/link";
 import { Button } from "./ui/button";
 import { LogoutButton } from "./logout-button";
 import { LoginDialog } from "./login-dialog";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 interface AuthButtonProps {
   user: {
@@ -36,11 +34,10 @@ function canMaintain(role: string | null): boolean {
 
 export function AuthButton({ user, profile }: AuthButtonProps) {
   const [loginOpen, setLoginOpen] = useState(false);
-  const router = useRouter();
 
   const handleLoginSuccess = () => {
-    // 登录成功后刷新页面数据
-    router.refresh();
+    // 登录/注册成功后刷新页面，更新为已登录状态
+    window.location.reload();
   };
 
   if (!user) {
@@ -78,7 +75,7 @@ export function AuthButton({ user, profile }: AuthButtonProps) {
       <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
         {canMaintain(role) && (
           <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
-            <Link href="/family-tree/settings/data-maintenance">数据维护</Link>
+            <Link href="/family-tree/settings/data-maintenance">用户管理</Link>
           </Button>
         )}
         <LogoutButton className="w-full sm:w-auto" />

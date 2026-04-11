@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 
 type Props = {
@@ -7,12 +9,15 @@ type Props = {
   isSuperAdmin: boolean;
   /** 当前高亮路由前缀，用于博客页样式 */
   blogActive?: boolean;
+  /** 是否已登录 */
+  isLoggedIn?: boolean;
 };
 
 export function GenealogyHeaderNavLinks({
   canMaintainData,
   isSuperAdmin,
   blogActive = false,
+  isLoggedIn = false,
 }: Props) {
   return (
     <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
@@ -26,7 +31,8 @@ export function GenealogyHeaderNavLinks({
       >
         家族博客
       </Link>
-      {canMaintainData && (
+      {/* 登录用户都可以看到成员列表，但只有管理员可以编辑 */}
+      {isLoggedIn && (
         <Link href="/family-tree" className="hover:text-primary transition-colors">
           成员列表
         </Link>
