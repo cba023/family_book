@@ -132,7 +132,7 @@ export default function NewBlogPostPage() {
             返回博客
           </Button>
         </Link>
-        <div className="flex gap-2">
+        <div className="flex gap-2 lg:hidden">
           <Button
             variant="outline"
             onClick={() => setShowPreview(!showPreview)}
@@ -279,7 +279,7 @@ export default function NewBlogPostPage() {
           </div>
 
           {/* 预览区域 */}
-          <div className={!showPreview ? "hidden lg:block" : ""}>
+          <div className={showPreview ? "" : "hidden lg:block"}>
             <Card>
               <CardHeader>
                 <CardTitle>预览</CardTitle>
