@@ -23,6 +23,9 @@ if (!supabaseUrl || !supabaseKey) {
   process.exit(1);
 }
 
+const supabaseUrlResolved = supabaseUrl;
+const supabaseKeyResolved = supabaseKey;
+
 async function migrate() {
   console.log('🚀 开始从 Supabase 迁移数据...\n');
 
@@ -30,7 +33,7 @@ async function migrate() {
   initDatabase();
 
   // 创建 Supabase 客户端
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(supabaseUrlResolved, supabaseKeyResolved);
 
   // 1. 获取所有家族成员数据
   console.log('📥 正在从 Supabase 获取数据...');

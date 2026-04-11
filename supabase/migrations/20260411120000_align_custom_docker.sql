@@ -207,8 +207,13 @@ CREATE POLICY "family_members_delete"
   USING (public.is_admin());
 
 CREATE POLICY "blog_posts_select"
-  ON public.blog_posts FOR SELECT TO authenticated
-  USING (user_id = auth.uid() OR public.is_admin());
+  ON public.blog_posts FOR SELECT
+  TO anon, authenticated
+  USING (
+    (status IN ('published', 'archived'))
+    OR (auth.uid() IS NOT NULL AND user_id = auth.uid())
+    OR public.is_admin()
+  );
 
 CREATE POLICY "blog_posts_insert"
   ON public.blog_posts FOR INSERT TO authenticated
@@ -225,3 +230,4 @@ CREATE POLICY "blog_posts_delete"
 
 GRANT ALL ON public.family_members TO authenticated;
 GRANT ALL ON public.blog_posts TO authenticated;
+GRANT SELECT ON public.blog_posts TO anon;

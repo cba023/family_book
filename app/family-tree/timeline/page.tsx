@@ -3,8 +3,8 @@ import { fetchMembersForTimeline } from "../actions";
 import { TimelineClient } from "./timeline-client";
 
 async function TimelineWrapper() {
-  const members = await fetchMembersForTimeline();
-  return <TimelineClient initialData={members} />;
+  const { data: members, requireAuth } = await fetchMembersForTimeline();
+  return <TimelineClient initialData={members} requireAuth={requireAuth} />;
 }
 
 export default function TimelinePage() {

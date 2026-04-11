@@ -169,8 +169,13 @@ CREATE INDEX idx_blog_posts_created ON public.blog_posts (created_at);
 ALTER TABLE public.blog_posts ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "blog_posts_select"
-  ON public.blog_posts FOR SELECT TO authenticated
-  USING (user_id = auth.uid() OR public.is_admin());
+  ON public.blog_posts FOR SELECT
+  TO anon, authenticated
+  USING (
+    (status IN ('published', 'archived'))
+    OR (auth.uid() IS NOT NULL AND user_id = auth.uid())
+    OR public.is_admin()
+  );
 
 CREATE POLICY "blog_posts_insert"
   ON public.blog_posts FOR INSERT TO authenticated
@@ -188,5 +193,6 @@ CREATE POLICY "blog_posts_delete"
 GRANT SELECT, UPDATE ON public.profiles TO authenticated;
 GRANT ALL ON public.family_members TO authenticated;
 GRANT ALL ON public.blog_posts TO authenticated;
+GRANT SELECT ON public.blog_posts TO anon;
 GRANT USAGE, SELECT ON SEQUENCE public.family_members_id_seq TO authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.blog_posts_id_seq TO authenticated;

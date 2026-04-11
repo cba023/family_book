@@ -177,7 +177,6 @@ npm run build  # 生产构建
 ```typescript
 @/components  → components/
 @/lib         → lib/
-@/hooks       → hooks/
 @/components/ui → shadcn 组件
 @/components/rich-text → 富文本编辑器组件
 ```
@@ -186,9 +185,6 @@ npm run build  # 生产构建
 - 使用 `cn()` 函数合并 className: `cn("base-class", className)`
 - shadcn 组件位于 `components/ui/`
 - 图标使用 `lucide-react`
-
-### 实时功能
-使用 `hooks/use-realtime-chat.tsx` 作为 Supabase Realtime 的参考实现。
 
 ## 环境变量
 

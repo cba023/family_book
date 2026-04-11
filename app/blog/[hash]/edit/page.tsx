@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { fetchBlogPostBySlug, updateBlogPost } from "../../actions";
+import { fetchBlogPostByHash, updateBlogPost } from "../../actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,13 +29,13 @@ import {
 
 interface EditBlogPostPageProps {
   params: Promise<{
-    slug: string;
+    hash: string;
   }>;
 }
 
 export default function EditBlogPostPage({ params }: EditBlogPostPageProps) {
   const router = useRouter();
-  const [slug, setSlug] = useState<string>("");
+  const [hash, setHash] = useState<string>("");
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -49,9 +49,9 @@ export default function EditBlogPostPage({ params }: EditBlogPostPageProps) {
 
   useEffect(() => {
     const loadPost = async () => {
-      const { slug: paramSlug } = await params;
-      setSlug(paramSlug);
-      const post = await fetchBlogPostBySlug(paramSlug);
+      const { hash: paramHash } = await params;
+      setHash(paramHash);
+      const post = await fetchBlogPostByHash(paramHash);
       if (post) {
         setPostId(post.id);
         setTitle(post.title);
@@ -83,7 +83,7 @@ export default function EditBlogPostPage({ params }: EditBlogPostPageProps) {
     setIsSubmitting(false);
 
     if (result.success) {
-      router.push(`/blog/${slug}`);
+      router.push(`/blog/${hash}`);
     } else {
       alert(result.error || "更新失败");
     }
@@ -100,7 +100,7 @@ export default function EditBlogPostPage({ params }: EditBlogPostPageProps) {
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="flex justify-between items-center mb-6">
-        <Link href={`/blog/${slug}`}>
+        <Link href={`/blog/${hash}`}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
             返回文章
@@ -200,55 +200,44 @@ export default function EditBlogPostPage({ params }: EditBlogPostPageProps) {
                     onChange={(e) => setContent(e.target.value)}
                     rows={20}
                     required
-                    className="font-mono text-sm"
                   />
                 </div>
 
                 <div>
-                  <Label>状态</Label>
-                  <Select
-                    value={status}
-                    onValueChange={(v) =>
-                      setStatus(v as "draft" | "published" | "archived")
-                    }
-                  >
+                  <Label htmlFor="status">状态</Label>
+                  <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="published">发布</SelectItem>
+                      <SelectItem value="published">已发布</SelectItem>
                       <SelectItem value="draft">草稿</SelectItem>
-                      <SelectItem value="archived">归档</SelectItem>
+                      <SelectItem value="archived">已归档</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <Button
-                  type="submit"
-                  disabled={isSubmitting || !title.trim() || !content.trim()}
-                  className="w-full"
-                >
+                <Button type="submit" disabled={isSubmitting} className="w-full">
                   <Save className="w-4 h-4 mr-2" />
-                  {isSubmitting ? "保存中..." : "更新文章"}
+                  {isSubmitting ? "保存中..." : "保存"}
                 </Button>
               </CardContent>
             </Card>
           </div>
 
-          <div className={!showPreview ? "hidden lg:block" : ""}>
+          <div className={showPreview ? "" : "hidden lg:block"}>
             <Card>
               <CardHeader>
                 <CardTitle>预览</CardTitle>
               </CardHeader>
               <CardContent>
-                {title && (
-                  <h1 className="text-3xl font-bold mb-4">{title}</h1>
-                )}
-                {content ? (
+                <div className="prose prose-sm max-w-none">
+                  <h1>{title || "无标题"}</h1>
+                  {excerpt && (
+                    <p className="text-muted-foreground italic">{excerpt}</p>
+                  )}
                   <MarkdownContent content={content} />
-                ) : (
-                  <p className="text-muted-foreground">暂无内容</p>
-                )}
+                </div>
               </CardContent>
             </Card>
           </div>

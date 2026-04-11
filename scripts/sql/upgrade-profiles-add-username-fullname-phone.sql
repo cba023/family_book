@@ -4,9 +4,11 @@
 --
 -- 用法：
 --   1) Adminer：选中数据库 → SQL 命令 → 粘贴全文 → 执行
---   2) 宿主机 psql（容器名按 docker ps 调整）：
---        docker exec -i supabase_db_xxx psql -U postgres -d postgres -f - < scripts/sql/upgrade-profiles-add-username-fullname-phone.sql
---   3) 使用 Supabase CLI：在项目根目录执行 npx supabase db push（会应用 supabase/migrations 下未执行的迁移）
+--   2) 推荐：./scripts/run-sql-on-local-supabase.sh scripts/sql/upgrade-profiles-add-username-fullname-phone.sql
+--      （自动匹配 supabase_db_* 容器，勿使用不存在的容器名 supabase-db）
+--   3) 手动：docker ps 查看数据库容器名（如 supabase_db_family_book），再：
+--        docker exec -i <该名> psql -U postgres -d postgres < 本文件
+--   4) Supabase CLI：npx supabase db push
 -- =============================================================================
 
 -- 账户名（username）+ 可选姓名、手机；与 Auth 中合成邮箱 account.familybook.local 对应

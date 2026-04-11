@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { fetchMembersWithBiography } from "./actions";
 import { BiographyBookLoader } from "./biography-book-loader";
 import { FAMILY_SURNAME } from "@/lib/utils";
+import { LoginPrompt } from "@/components/login-prompt";
 
 export const metadata = {
     title: `${FAMILY_SURNAME}氏生平册`,
@@ -9,7 +10,7 @@ export const metadata = {
 };
 
 async function BookContent() {
-    const { data: members, error } = await fetchMembersWithBiography();
+    const { data: members, error, requireAuth } = await fetchMembersWithBiography();
 
     if (error) {
         return (
@@ -33,7 +34,16 @@ async function BookContent() {
         );
     }
 
-    return <BiographyBookLoader members={members} />;
+    return (
+        <>
+            <BiographyBookLoader members={members} />
+            {requireAuth && (
+                <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4">
+                    <LoginPrompt message="登录后可查看更多家族成员的生平事迹" />
+                </div>
+            )}
+        </>
+    );
 }
 
 export default function BiographyBookPage() {

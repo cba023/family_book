@@ -1,6 +1,7 @@
 "use server";
 
 import { requireUser, numId } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { formatActionError } from "@/lib/format-action-error";
 
 export interface StatisticsData {
@@ -16,13 +17,10 @@ export interface StatisticsData {
 export async function fetchFamilyStatistics(): Promise<{
   data: StatisticsData | null;
   error: string | null;
+  requireAuth: boolean;
 }> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    return { data: null, error: authError };
-  }
-
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("family_members")
       .select("id, name, gender, generation, is_alive, birthday, is_married_in")
@@ -166,6 +164,9 @@ export async function fetchFamilyStatistics(): Promise<{
       { name: "嫁入", value: marriedInCounts["嫁入"] || 0, fill: "#f97316" },
     ];
 
+    // 检查用户是否登录
+    const { user } = await requireUser();
+
     return {
       data: {
         totalMembers,
@@ -177,12 +178,14 @@ export async function fetchFamilyStatistics(): Promise<{
         marriedInStats,
       },
       error: null,
+      requireAuth: !user,
     };
   } catch (error) {
     console.error("Error fetching statistics:", error);
     return {
       data: null,
       error: formatActionError(error),
+      requireAuth: false,
     };
   }
 }

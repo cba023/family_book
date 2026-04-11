@@ -52,7 +52,7 @@ function cleanOldBackups() {
   }
 }
 
-function backupDatabase() {
+async function backupDatabase() {
   console.log('🚀 开始备份数据库...\n');
 
   ensureBackupDir();
@@ -67,17 +67,9 @@ function backupDatabase() {
     process.exit(1);
   }
 
-  // 执行备份 (SQLite 的 backup API)
+  // better-sqlite3 v12+：backup() 为异步，完成后 resolve
   try {
-    // 使用 better-sqlite3 的 backup 方法
-    const backup = db.backup(backupPath);
-    
-    // 等待备份完成
-    while (backup.remaining > 0) {
-      backup.step(-1); // -1 表示复制所有页面
-    }
-    
-    backup.free();
+    await db.backup(backupPath);
 
     console.log('✅ 备份成功!');
     console.log(`📄 备份文件: ${backupFilename}`);
@@ -142,12 +134,12 @@ function exportToJson() {
 }
 
 // 主函数
-function main() {
+async function main() {
   console.log('═══════════════════════════════════════');
   console.log('      族谱数据库备份工具');
   console.log('═══════════════════════════════════════\n');
 
-  const backupPath = backupDatabase();
+  const backupPath = await backupDatabase();
   const jsonPath = exportToJson();
 
   console.log('\n═══════════════════════════════════════');
@@ -161,7 +153,6 @@ function main() {
   console.log(`   cp ${backupPath} data/genealogy.db`);
 }
 
-main();
-
-// 优雅关闭
-db.close();
+main().finally(() => {
+  db.close();
+});

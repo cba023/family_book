@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Button } from "@/components/ui/button";
-import { Search, RotateCcw, ChevronLeft, ChevronRight, Users, X } from "lucide-react";
+import { Search, RotateCcw, ChevronLeft, ChevronRight, Users, X, Lock, LogIn } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/popover";
 import { TimelineNode, type TimelineNodeData } from "./timeline-node";
 import { YearNode, type YearNodeData } from "./year-node";
+import { LoginDialog } from "@/components/login-dialog";
 
 interface TimelineMember {
   id: number;
@@ -37,6 +38,7 @@ interface TimelineMember {
 
 interface TimelineClientProps {
   initialData: TimelineMember[];
+  requireAuth?: boolean;
 }
 
 const nodeTypes = {
@@ -50,7 +52,7 @@ const ROW_HEIGHT = 50;
 const TRACK_GAP = 2; // years gap between members on same track
 const HEADER_HEIGHT = 40;
 
-function TimelineFlow({ initialData }: TimelineClientProps) {
+function TimelineFlow({ initialData, requireAuth }: TimelineClientProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -58,6 +60,7 @@ function TimelineFlow({ initialData }: TimelineClientProps) {
   const [searchResults, setSearchResults] = React.useState<Node[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = React.useState(0);
   const [isSearchPopoverOpen, setIsSearchPopoverOpen] = React.useState(false);
+  const [loginOpen, setLoginOpen] = React.useState(false);
   const reactFlowInstance = useReactFlow();
 
   // Process data and calculate layout
@@ -363,8 +366,23 @@ function TimelineFlow({ initialData }: TimelineClientProps) {
                 <RotateCcw className="h-3 w-3 mr-1"/> 重置
             </Button>
           </div>
+          {requireAuth && (
+            <div className="flex items-center gap-2 bg-background/90 p-2 rounded-md border shadow-sm ml-2">
+              <Lock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">登录后可查看完整时间轴</span>
+              <Button size="sm" variant="default" onClick={() => setLoginOpen(true)} className="h-8 text-xs gap-1">
+                <LogIn className="h-3 w-3" />
+                登录
+              </Button>
+            </div>
+          )}
         </Panel>
       </ReactFlow>
+      <LoginDialog
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
+        onSuccess={() => window.location.reload()}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBlogPost, generateSlug } from "../actions";
@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Save, Eye, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Save, Eye, Image as ImageIcon, Loader2 } from "lucide-react";
 import MarkdownContent from "@/components/markdown-content";
 import { ImageUpload } from "@/components/image-upload";
 import {
@@ -26,9 +26,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { LoginDialog } from "@/components/login-dialog";
+import { createClient } from "@/lib/supabase/client";
 
 export default function NewBlogPostPage() {
   const router = useRouter();
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [excerpt, setExcerpt] = useState("");
@@ -37,6 +43,26 @@ export default function NewBlogPostPage() {
   const [status, setStatus] = useState<"draft" | "published">("published");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setIsLoggedIn(false);
+        setLoginOpen(true);
+      } else {
+        setIsLoggedIn(true);
+      }
+      setIsCheckingAuth(false);
+    };
+    checkAuth();
+  }, []);
+
+  const handleLoginSuccess = () => {
+    setIsLoggedIn(true);
+    setLoginOpen(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,12 +83,45 @@ export default function NewBlogPostPage() {
 
     setIsSubmitting(false);
 
-    if (result.success) {
-      router.push(`/blog/${slug}`);
+    if (result.success && result.hash) {
+      router.push(`/blog/${result.hash}`);
     } else {
       alert(result.error || "创建失败");
     }
   };
+
+  // 检查登录状态中
+  if (isCheckingAuth) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-6xl flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">正在检查登录状态...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 未登录状态
+  if (!isLoggedIn) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="flex justify-between items-center mb-6">
+          <Link href="/blog">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              返回博客
+            </Button>
+          </Link>
+        </div>
+        <LoginDialog
+          open={loginOpen}
+          onOpenChange={setLoginOpen}
+          onSuccess={handleLoginSuccess}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">

@@ -1,6 +1,7 @@
 "use server";
 
 import { requireUser, numId } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { formatActionError } from "@/lib/format-action-error";
 
 export interface FamilyMemberNode {
@@ -27,12 +28,8 @@ export interface FetchGraphResult {
 }
 
 export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    return { data: [], error: authError };
-  }
-
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("family_members")
       .select(

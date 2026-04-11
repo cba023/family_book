@@ -58,12 +58,16 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
           pre: ({ children, ...props }) => {
             // 检查子元素是否是 markmap 代码块
             const childArray = React.Children.toArray(children);
-            const codeElement = childArray[0] as React.ReactElement;
-            
-            // 检查 className 是否包含 markmap
-            const className = codeElement?.props?.className || "";
-            
-            if (className.includes("markmap")) {
+            const codeElement = childArray[0] as
+              | React.ReactElement<{ className?: string; children?: React.ReactNode }>
+              | undefined;
+
+            const className =
+              typeof codeElement?.props?.className === "string"
+                ? codeElement.props.className
+                : "";
+
+            if (className.includes("markmap") && codeElement) {
               const content = String(codeElement.props.children).replace(/\n$/, "");
               return <MarkmapViewer content={content} />;
             }
@@ -91,10 +95,11 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
           ),
           img: ({ src, alt }) => {
             // 检查是否是视频文件
-            if (src?.match(/\.(mp4|webm|mov|mkv)$/i)) {
+            const srcStr = typeof src === "string" ? src : "";
+            if (srcStr.match(/\.(mp4|webm|mov|mkv)$/i)) {
               return (
                 <video
-                  src={src}
+                  src={srcStr}
                   controls
                   className="rounded-lg max-w-full h-auto my-4"
                   style={{ maxHeight: '500px' }}
@@ -105,7 +110,7 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
             }
             return (
               <img
-                src={src}
+                src={srcStr || undefined}
                 alt={alt}
                 className="rounded-lg max-w-full h-auto my-4"
               />

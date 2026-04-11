@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { fetchBlogPostBySlug } from "../actions";
+import { fetchBlogPostByHash } from "../actions";
+import { getUserRole } from "@/lib/auth/session";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -9,20 +10,27 @@ import { ArrowLeft, Calendar, Eye, Tag, Edit } from "lucide-react";
 import { format } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import MarkdownContent from "@/components/markdown-content";
+import { DeleteButton } from "./delete-button";
 
 interface BlogPostPageProps {
   params: Promise<{
-    slug: string;
+    hash: string;
   }>;
 }
 
 async function BlogPostContent({ params }: BlogPostPageProps) {
-  const { slug } = await params;
-  const post = await fetchBlogPostBySlug(slug);
+  const { hash } = await params;
+  const post = await fetchBlogPostByHash(hash);
+  const { user, role } = await getUserRole();
 
   if (!post) {
     notFound();
   }
+
+  // 判断是否有编辑/删除权限
+  const isAdmin = role === "super_admin" || role === "admin";
+  const isAuthor = user?.id === post.user_id;
+  const canEdit = isAdmin || isAuthor;
 
   return (
     <article>
@@ -50,12 +58,17 @@ async function BlogPostContent({ params }: BlogPostPageProps) {
             <Eye className="w-4 h-4" />
             {post.view_count} 次阅读
           </div>
-          <Link href={`/blog/${post.slug}/edit`}>
-            <Button variant="ghost" size="sm">
-              <Edit className="w-4 h-4 mr-1" />
-              编辑
-            </Button>
-          </Link>
+          {canEdit && (
+            <>
+              <Link href={`/blog/${post.hash}/edit`}>
+                <Button variant="ghost" size="sm">
+                  <Edit className="w-4 h-4 mr-1" />
+                  编辑
+                </Button>
+              </Link>
+              <DeleteButton postId={post.id} postTitle={post.title} />
+            </>
+          )}
         </div>
 
         {post.tags && (

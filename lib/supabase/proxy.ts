@@ -47,23 +47,30 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
+  // 允许匿名访问的路径
+  const publicPaths = ["/", "/blog", "/family-tree/graph", "/family-tree/graph-3d"];
+  const isPublicPath = publicPaths.some(path => 
+    request.nextUrl.pathname === path || 
+    request.nextUrl.pathname.startsWith("/blog/") ||
+    request.nextUrl.pathname.startsWith("/family-tree/graph")
+  );
+
   if (
-    request.nextUrl.pathname !== "/" &&
+    !isPublicPath &&
     !user &&
     !request.nextUrl.pathname.startsWith("/noauth") &&
-    !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/auth")
   ) {
-    // no user, potentially respond by redirecting the user to the login page
+    // no user, potentially respond by redirecting the user to the home page
     const url = request.nextUrl.clone();
-    url.pathname = "/auth/login";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
   // If you're creating a new response object with NextResponse.next() make sure to:
   // 1. Pass the request in it, like so:
-  //    const myNewResponse = NextResponse.next({ request })
+  //    myNewResponse = NextResponse.next({ request })
   // 2. Copy over the cookies, like so:
   //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
   // 3. Change the myNewResponse object to fit your needs, but avoid changing

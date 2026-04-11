@@ -44,8 +44,8 @@ export function MobileNav({
         )}
         {isSuperAdmin && (
           <DropdownMenuItem asChild>
-            <Link href="/family-tree/settings/users" className="w-full cursor-pointer">
-              用户管理
+            <Link href="/family-tree/settings/data-maintenance" className="w-full cursor-pointer">
+              数据维护
             </Link>
           </DropdownMenuItem>
         )}

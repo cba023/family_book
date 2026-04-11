@@ -1,6 +1,7 @@
 "use server";
 
 import { requireUser, numId } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { formatActionError } from "@/lib/format-action-error";
 
 export interface BiographyMember {
@@ -22,13 +23,10 @@ export interface BiographyMember {
 export async function fetchMembersWithBiography(): Promise<{
   data: BiographyMember[];
   error: string | null;
+  requireAuth: boolean;
 }> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    return { data: [], error: authError };
-  }
-
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("family_members")
       .select("*")
@@ -120,12 +118,16 @@ export async function fetchMembersWithBiography(): Promise<{
       };
     });
 
-    return { data: transformedData, error: null };
+    // 检查用户是否登录
+    const { user } = await requireUser();
+
+    return { data: transformedData, error: null, requireAuth: !user };
   } catch (error) {
     console.error("Error fetching members with biography:", error);
     return {
       data: [],
       error: formatActionError(error),
+      requireAuth: false,
     };
   }
 }

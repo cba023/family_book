@@ -1,13 +1,16 @@
 "use server";
 
-import { requireUser, numId } from "@/lib/auth/session";
+import { requireUser, getUserRole, numId } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { formatActionError } from "@/lib/format-action-error";
 import { revalidatePath } from "next/cache";
+import crypto from "crypto";
 
 export interface BlogPost {
   id: number;
   title: string;
   slug: string;
+  hash: string;
   content: string;
   excerpt: string | null;
   cover_image: string | null;
@@ -16,7 +19,11 @@ export interface BlogPost {
   view_count: number;
   created_at: string;
   updated_at: string;
+  user_id?: string;
 }
+
+/** 游客与未特指作者均可浏览的文章状态 */
+const PUBLIC_BLOG_STATUSES = ["published", "archived"] as const;
 
 export interface CreateBlogInput {
   title: string;
@@ -33,6 +40,7 @@ function mapPost(row: Record<string, unknown>): BlogPost {
     id: numId(row.id),
     title: String(row.title),
     slug: String(row.slug),
+    hash: String(row.hash ?? ""),
     content: String(row.content),
     excerpt: row.excerpt != null ? String(row.excerpt) : null,
     cover_image: row.cover_image != null ? String(row.cover_image) : null,
@@ -43,32 +51,36 @@ function mapPost(row: Record<string, unknown>): BlogPost {
       row.created_at != null ? String(row.created_at) : new Date().toISOString(),
     updated_at:
       row.updated_at != null ? String(row.updated_at) : new Date().toISOString(),
+    user_id: row.user_id != null ? String(row.user_id) : undefined,
   };
 }
 
+// 生成基于内容+时间戳的唯一 hash，确保每篇文章都有唯一标识
+function generateContentHash(title: string, content: string): string {
+  const timestamp = Date.now();
+  const data = `${title}:${content}:${timestamp}`;
+  return crypto.createHash("sha256").update(data).digest("hex").substring(0, 16);
+}
+
 export async function generateSlug(title: string): Promise<string> {
-  return title
+  const baseSlug = title
     .toLowerCase()
     .replace(/[^\w\s-]/g, "")
     .replace(/\s+/g, "-")
-    .substring(0, 100);
+    .substring(0, 50);
+  const randomSuffix = Math.random().toString(36).substring(2, 6);
+  return `${baseSlug}-${randomSuffix}`;
 }
 
-export async function fetchBlogPosts(
-  status?: "draft" | "published" | "archived",
-): Promise<BlogPost[]> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    console.error("fetchBlogPosts:", authError);
-    return [];
-  }
-
+/** 博客首页列表：已发布 + 已归档（游客可读，依赖 RLS） */
+export async function fetchBlogPosts(): Promise<BlogPost[]> {
   try {
-    let q = supabase.from("blog_posts").select("*");
-    if (status) {
-      q = q.eq("status", status);
-    }
-    const { data, error } = await q.order("created_at", { ascending: false });
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("blog_posts")
+      .select("*")
+      .in("status", [...PUBLIC_BLOG_STATUSES])
+      .order("created_at", { ascending: false });
 
     if (error) throw error;
     return (data ?? []).map((row) => mapPost(row as Record<string, unknown>));
@@ -117,16 +129,57 @@ export async function fetchBlogPostsPaginated(
   }
 }
 
+// 通过 hash 获取文章（主要访问方式）
+export async function fetchBlogPostByHash(
+  hash: string,
+): Promise<BlogPost | null> {
+  try {
+    const supabase = await createClient();
+    const { data: post, error } = await supabase
+      .from("blog_posts")
+      .select("*")
+      .eq("hash", hash)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!post) return null;
+
+    const postStatus = post.status as string;
+
+    // 已发布、已归档：游客可读
+    if (postStatus === "published" || postStatus === "archived") {
+      // 异步更新浏览数，不阻塞返回
+      supabase
+        .from("blog_posts")
+        .update({
+          view_count: Number(post.view_count ?? 0) + 1,
+        })
+        .eq("id", numId(post.id))
+        .then(({ error: upErr }) => {
+          if (upErr) console.error("view_count update:", upErr);
+        });
+      return mapPost(post as Record<string, unknown>);
+    }
+    
+    // 草稿只有作者自己能看
+    const { user } = await requireUser();
+    if (!user || user.id !== post.user_id) {
+      return null;
+    }
+    
+    return mapPost(post as Record<string, unknown>);
+  } catch (error) {
+    console.error("Error fetching blog post by hash:", error);
+    return null;
+  }
+}
+
+// 兼容旧版：通过 slug 获取文章
 export async function fetchBlogPostBySlug(
   slug: string,
 ): Promise<BlogPost | null> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    console.error("fetchBlogPostBySlug:", authError);
-    return null;
-  }
-
   try {
+    const supabase = await createClient();
     const { data: post, error } = await supabase
       .from("blog_posts")
       .select("*")
@@ -136,15 +189,29 @@ export async function fetchBlogPostBySlug(
     if (error) throw error;
     if (!post) return null;
 
-    const { error: upErr } = await supabase
-      .from("blog_posts")
-      .update({
-        view_count: Number(post.view_count ?? 0) + 1,
-      })
-      .eq("id", numId(post.id));
+    const postStatus = post.status as string;
 
-    if (upErr) console.error("view_count update:", upErr);
-
+    // 已发布、已归档：游客可读
+    if (postStatus === "published" || postStatus === "archived") {
+      // 异步更新浏览数，不阻塞返回
+      supabase
+        .from("blog_posts")
+        .update({
+          view_count: Number(post.view_count ?? 0) + 1,
+        })
+        .eq("id", numId(post.id))
+        .then(({ error: upErr }) => {
+          if (upErr) console.error("view_count update:", upErr);
+        });
+      return mapPost(post as Record<string, unknown>);
+    }
+    
+    // 草稿只有作者自己能看
+    const { user } = await requireUser();
+    if (!user || user.id !== post.user_id) {
+      return null;
+    }
+    
     return mapPost(post as Record<string, unknown>);
   } catch (error) {
     console.error("Error fetching blog post:", error);
@@ -153,13 +220,8 @@ export async function fetchBlogPostBySlug(
 }
 
 export async function fetchBlogPostById(id: number): Promise<BlogPost | null> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    console.error("fetchBlogPostById:", authError);
-    return null;
-  }
-
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("blog_posts")
       .select("*")
@@ -167,7 +229,21 @@ export async function fetchBlogPostById(id: number): Promise<BlogPost | null> {
       .maybeSingle();
 
     if (error) throw error;
-    return data ? mapPost(data as Record<string, unknown>) : null;
+    if (!data) return null;
+    
+    const postStatus = data.status as string;
+
+    if (postStatus === "published" || postStatus === "archived") {
+      return mapPost(data as Record<string, unknown>);
+    }
+    
+    // 草稿只有作者自己能看
+    const { user } = await requireUser();
+    if (!user || user.id !== data.user_id) {
+      return null;
+    }
+    
+    return mapPost(data as Record<string, unknown>);
   } catch (error) {
     console.error("Error fetching blog post:", error);
     return null;
@@ -176,13 +252,14 @@ export async function fetchBlogPostById(id: number): Promise<BlogPost | null> {
 
 export async function createBlogPost(
   input: CreateBlogInput,
-): Promise<{ success: boolean; id?: number; error?: string }> {
+): Promise<{ success: boolean; id?: number; hash?: string; error?: string }> {
   const { supabase, user, error: authError } = await requireUser();
   if (!user) {
     return { success: false, error: authError };
   }
 
   try {
+    // 检查 slug 是否已存在
     const { data: existing } = await supabase
       .from("blog_posts")
       .select("id")
@@ -193,19 +270,34 @@ export async function createBlogPost(
       return { success: false, error: "文章链接已存在，请修改标题" };
     }
 
+    // 生成内容 hash
+    const hash = generateContentHash(input.title, input.content);
+
+    // 检查 hash 是否已存在（内容重复）
+    const { data: existingHash } = await supabase
+      .from("blog_posts")
+      .select("id")
+      .eq("hash", hash)
+      .maybeSingle();
+
+    if (existingHash) {
+      return { success: false, error: "相同内容的文章已存在" };
+    }
+
     const { data, error } = await supabase
       .from("blog_posts")
       .insert({
         user_id: user.id,
         title: input.title,
         slug: input.slug,
+        hash,
         content: input.content,
         excerpt: input.excerpt ?? null,
         cover_image: input.cover_image ?? null,
         tags: input.tags ?? null,
         status: input.status ?? "published",
       })
-      .select("id")
+      .select("id, hash")
       .single();
 
     if (error) throw error;
@@ -213,7 +305,7 @@ export async function createBlogPost(
     revalidatePath("/blog");
     revalidatePath("/family-tree");
 
-    return { success: true, id: numId(data.id) };
+    return { success: true, id: numId(data.id), hash: data.hash };
   } catch (error) {
     console.error("Error creating blog post:", error);
     return { success: false, error: formatActionError(error) };
@@ -230,6 +322,21 @@ export async function updateBlogPost(
   }
 
   try {
+    // 检查是否是作者
+    const { data: existingPost } = await supabase
+      .from("blog_posts")
+      .select("user_id")
+      .eq("id", id)
+      .maybeSingle();
+    
+    if (!existingPost) {
+      return { success: false, error: "文章不存在" };
+    }
+    
+    if (existingPost.user_id !== user.id) {
+      return { success: false, error: "只能编辑自己的文章" };
+    }
+
     if (input.slug !== undefined) {
       const { data: existing } = await supabase
         .from("blog_posts")
@@ -249,7 +356,14 @@ export async function updateBlogPost(
 
     if (input.title !== undefined) patch.title = input.title;
     if (input.slug !== undefined) patch.slug = input.slug;
-    if (input.content !== undefined) patch.content = input.content;
+    if (input.content !== undefined) {
+      patch.content = input.content;
+      // 更新内容时重新生成 hash
+      patch.hash = generateContentHash(
+        (input.title ?? existingPost.title) as string,
+        input.content
+      );
+    }
     if (input.excerpt !== undefined) patch.excerpt = input.excerpt;
     if (input.cover_image !== undefined) patch.cover_image = input.cover_image;
     if (input.tags !== undefined) patch.tags = input.tags;
@@ -279,12 +393,29 @@ export async function updateBlogPost(
 export async function deleteBlogPost(
   id: number,
 ): Promise<{ success: boolean; error?: string }> {
-  const { supabase, user, error: authError } = await requireUser();
+  const { supabase, user, role, error: authError } = await getUserRole();
   if (!user) {
-    return { success: false, error: authError };
+    return { success: false, error: authError ?? "请先登录" };
   }
 
   try {
+    // 检查是否是作者
+    const { data: existingPost } = await supabase
+      .from("blog_posts")
+      .select("user_id")
+      .eq("id", id)
+      .maybeSingle();
+    
+    if (!existingPost) {
+      return { success: false, error: "文章不存在" };
+    }
+    
+    // 管理员可以删除任意博客，普通用户只能删除自己的文章
+    const isAdmin = role === "super_admin" || role === "admin";
+    if (!isAdmin && existingPost.user_id !== user.id) {
+      return { success: false, error: "只能删除自己的文章" };
+    }
+
     const { error } = await supabase.from("blog_posts").delete().eq("id", id);
     if (error) throw error;
 
@@ -299,16 +430,12 @@ export async function deleteBlogPost(
 }
 
 export async function searchBlogPosts(query: string): Promise<BlogPost[]> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    return [];
-  }
-
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("blog_posts")
       .select("*")
-      .eq("status", "published")
+      .in("status", [...PUBLIC_BLOG_STATUSES])
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -335,16 +462,12 @@ export async function searchBlogPosts(query: string): Promise<BlogPost[]> {
 }
 
 export async function fetchBlogTags(): Promise<string[]> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    return [];
-  }
-
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("blog_posts")
       .select("tags")
-      .eq("status", "published")
+      .in("status", [...PUBLIC_BLOG_STATUSES])
       .not("tags", "is", null);
 
     if (error) throw error;

@@ -2,6 +2,7 @@
 
 import { requireUser, requireAdmin, numId } from "@/lib/auth/session";
 import { formatActionError } from "@/lib/format-action-error";
+import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
 export interface FamilyMember {
@@ -286,14 +287,12 @@ export interface UpdateMemberInput extends CreateMemberInput {
   id: number;
 }
 
-export async function fetchMembersForTimeline(): Promise<FamilyMember[]> {
-  const { supabase, user, error: authError } = await requireUser();
-  if (!user) {
-    console.error("fetchMembersForTimeline:", authError);
-    return [];
-  }
-
+export async function fetchMembersForTimeline(): Promise<{
+  data: FamilyMember[];
+  requireAuth: boolean;
+}> {
   try {
+    const supabase = await createClient();
     const { data, error } = await supabase
       .from("family_members")
       .select("*")
@@ -319,7 +318,7 @@ export async function fetchMembersForTimeline(): Promise<FamilyMember[]> {
       );
     }
 
-    return rows.map((item) => {
+    const members = rows.map((item) => {
       const fid = item.father_id != null ? numId(item.father_id) : null;
       return {
         id: numId(item.id),
@@ -347,9 +346,14 @@ export async function fetchMembersForTimeline(): Promise<FamilyMember[]> {
             : new Date().toISOString(),
       };
     });
+
+    // 检查用户是否登录
+    const { user } = await requireUser();
+
+    return { data: members, requireAuth: !user };
   } catch (error) {
     console.error("Error fetching members for timeline:", error);
-    return [];
+    return { data: [], requireAuth: false };
   }
 }
 

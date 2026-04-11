@@ -31,14 +31,7 @@ export function GenealogyHeaderNavLinks({
           成员列表
         </Link>
       )}
-      {isSuperAdmin && (
-        <Link
-          href="/family-tree/settings/users"
-          className="hover:text-primary transition-colors"
-        >
-          用户管理
-        </Link>
-      )}
+
       <Link href="/family-tree/graph" className="hover:text-primary transition-colors">
         族谱视图
       </Link>

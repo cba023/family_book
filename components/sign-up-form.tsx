@@ -73,7 +73,8 @@ export function SignUpForm({
     };
 
     try {
-      const { error } = await supabase.auth.signUp({
+      // 注册
+      const { error: signUpError } = await supabase.auth.signUp({
         email: syntheticEmailFromUsername(uCheck.username),
         password,
         options: {
@@ -81,8 +82,18 @@ export function SignUpForm({
           emailRedirectTo: `${window.location.origin}/`,
         },
       });
-      if (error) throw error;
-      router.push("/auth/sign-up-success");
+      if (signUpError) throw signUpError;
+
+      // 自动登录
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: syntheticEmailFromUsername(uCheck.username),
+        password,
+      });
+      if (signInError) throw signInError;
+
+      // 登录成功，刷新主页
+      router.push("/");
+      router.refresh();
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {

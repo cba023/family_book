@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
+  // 全站多处使用 Supabase SSR（cookies）；开启 cacheComponents 会导致预渲染阶段 cookies() 失败
+  cacheComponents: false,
   output: 'standalone', // 优化 Docker 构建
   poweredByHeader: false, // 隐藏 X-Powered-By 头
   async headers() {

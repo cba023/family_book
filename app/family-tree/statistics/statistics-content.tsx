@@ -3,9 +3,10 @@ import { fetchFamilyStatistics } from "./actions";
 import { StatisticsCharts } from "./charts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { LoginPrompt } from "@/components/login-prompt";
 
 export async function StatisticsContent() {
-  const { data, error } = await fetchFamilyStatistics();
+  const { data, error, requireAuth } = await fetchFamilyStatistics();
 
   if (error) {
     return (
@@ -25,5 +26,14 @@ export async function StatisticsContent() {
     );
   }
 
-  return <StatisticsCharts data={data} />;
+  return (
+    <>
+      <StatisticsCharts data={data} />
+      {requireAuth && (
+        <div className="mt-6">
+          <LoginPrompt message="登录后可查看更多详细统计数据" />
+        </div>
+      )}
+    </>
+  );
 }
