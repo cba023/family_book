@@ -336,12 +336,8 @@ export async function updateBlogPost(
       params.push(input.slug);
     }
     if (input.content !== undefined) {
-      const titleForHash = input.title ?? existingPost.title;
-      const nextHash = generateContentHash(titleForHash, input.content);
       parts.push(`content = $${i++}`);
       params.push(input.content);
-      parts.push(`hash = $${i++}`);
-      params.push(nextHash);
     }
     if (input.excerpt !== undefined) {
       parts.push(`excerpt = $${i++}`);
