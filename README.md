@@ -76,6 +76,7 @@ npm install
 |------|------|
 | `DATABASE_URL` | PostgreSQL 连接串 |
 | `AUTH_SECRET` | 至少 16 字符，用于签发登录 Cookie |
+| `AUTH_INSECURE_COOKIE` | 设为 `1` 时允许在 **HTTP**（非 HTTPS）下写入会话 Cookie；Docker 常用 `http://IP:3000` 访问时需开启。已用 HTTPS 反向代理时可不设或设为 `0` |
 | `NEXT_PUBLIC_FAMILY_SURNAME` | 站点展示的姓氏，默认「陈」 |
 
 ### 4. 数据库表结构
@@ -112,6 +113,7 @@ docker compose up -d --build
 
 - **应用**: [http://localhost:3000](http://localhost:3000)
 - **Postgres**: 默认用户/库 `genealogy`，密码 `genealogy`，端口 `5432`（可通过环境变量覆盖，见 compose 文件）。
+- Compose 已默认 `AUTH_INSECURE_COOKIE=1`，避免仅用 **HTTP** 访问时登录 Cookie 无法保存（若登录一直无效，请确认未在环境中误删该变量）。
 - 首次访问按向导完成 **`/setup`**（若库已初始化且已有用户，将直接进入站点）。
 
 **生产参考：`docker-compose.prod.yml`**
@@ -158,6 +160,7 @@ docker run -d --name familybook-app -p 3000:3000 \
   -v familybook-data:/app/data \
   -e DATABASE_URL='postgresql://用户:密码@数据库主机:5432/库名' \
   -e AUTH_SECRET='至少16位随机串' \
+  -e AUTH_INSECURE_COOKIE=1 \
   -e NEXT_PUBLIC_FAMILY_SURNAME='陈' \
   familybook:latest
 ```

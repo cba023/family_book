@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { SetupStep } from "@/lib/setup-state";
+import type { DatabaseConnectionParts } from "@/app/setup/actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -15,15 +17,15 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
-  setupTestConnection,
-  setupSaveDatabaseUrl,
+  setupTestPostgresLogin,
+  setupTestDatabaseParts,
+  setupSaveDatabaseFromParts,
   setupApplySchema,
   setupCreateSuperAdmin,
 } from "@/app/setup/actions";
 import { Loader2 } from "lucide-react";
 
-const DEFAULT_URL =
-  "postgresql://postgres:123456@127.0.0.1:5432/mydb";
+type ConnectionPhase = 1 | 2 | 3;
 
 export function SetupWizard({
   initialStep,
@@ -39,12 +41,28 @@ export function SetupWizard({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [databaseUrl, setDatabaseUrl] = useState(DEFAULT_URL);
+  const [connPhase, setConnPhase] = useState<ConnectionPhase>(1);
+  const [host, setHost] = useState("127.0.0.1");
+  const [port, setPort] = useState("5432");
+  const [pgUser, setPgUser] = useState("postgres");
+  const [pgPassword, setPgPassword] = useState("");
+  const [databaseName, setDatabaseName] = useState("familybook");
+  const [createDbIfMissing, setCreateDbIfMissing] = useState(true);
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+
+  const partsPayload = (): DatabaseConnectionParts => ({
+    host,
+    port,
+    user: pgUser,
+    password: pgPassword,
+    database: databaseName,
+    createDatabaseIfNotExists: createDbIfMissing,
+  });
 
   useEffect(() => {
     if (!doneSuccess) {
@@ -52,10 +70,10 @@ export function SetupWizard({
     }
   }, [initialStep, doneSuccess]);
 
-  const handleTest = async () => {
+  const handleTestLogin = async () => {
     setBusy(true);
     setError(null);
-    const r = await setupTestConnection(databaseUrl);
+    const r = await setupTestPostgresLogin(host, port, pgUser, pgPassword);
     setBusy(false);
     if (!r.ok) {
       setError(r.message);
@@ -64,10 +82,22 @@ export function SetupWizard({
     setError(null);
   };
 
-  const handleSaveUrl = async () => {
+  const handleTestTargetDb = async () => {
     setBusy(true);
     setError(null);
-    const r = await setupSaveDatabaseUrl(databaseUrl);
+    const r = await setupTestDatabaseParts(partsPayload());
+    setBusy(false);
+    if (!r.ok) {
+      setError(r.message);
+      return;
+    }
+    setError(null);
+  };
+
+  const handleSaveConnection = async () => {
+    setBusy(true);
+    setError(null);
+    const r = await setupSaveDatabaseFromParts(partsPayload());
     setBusy(false);
     if (!r.ok) {
       setError(r.message);
@@ -182,42 +212,192 @@ export function SetupWizard({
       ) : null}
 
       {step === "connection" ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>连接数据库</CardTitle>
-            <CardDescription>
-              填写 PostgreSQL 连接串（与 Docker 中账号、库名一致）
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="dsn">DATABASE_URL</Label>
-              <Input
-                id="dsn"
-                value={databaseUrl}
-                onChange={(e) => setDatabaseUrl(e.target.value)}
-                className="font-mono text-sm"
-                autoComplete="off"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={busy}
-                onClick={handleTest}
-              >
-                {busy ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                测试连接
-              </Button>
-              <Button type="button" disabled={busy} onClick={handleSaveUrl}>
-                保存并继续
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <>
+          <div className="flex justify-center gap-2 text-[11px] text-muted-foreground">
+            <span className={connPhase === 1 ? "font-medium text-foreground" : ""}>
+              地址与端口
+            </span>
+            <span>→</span>
+            <span className={connPhase === 2 ? "font-medium text-foreground" : ""}>
+              账号密码
+            </span>
+            <span>→</span>
+            <span className={connPhase === 3 ? "font-medium text-foreground" : ""}>
+              数据库名
+            </span>
+          </div>
+
+          {connPhase === 1 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>PostgreSQL 地址</CardTitle>
+                <CardDescription>
+                  填写服务器主机名或 IP，以及端口（默认 5432）
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pg-host">主机</Label>
+                  <Input
+                    id="pg-host"
+                    value={host}
+                    onChange={(e) => setHost(e.target.value)}
+                    placeholder="127.0.0.1"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pg-port">端口</Label>
+                  <Input
+                    id="pg-port"
+                    value={port}
+                    onChange={(e) => setPort(e.target.value)}
+                    placeholder="5432"
+                    inputMode="numeric"
+                    autoComplete="off"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  className="w-full"
+                  disabled={busy}
+                  onClick={() => setConnPhase(2)}
+                >
+                  下一步
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {connPhase === 2 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>数据库账号</CardTitle>
+                <CardDescription>
+                  填写用于连接 PostgreSQL 的用户名与密码（非本站登录账号）
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pg-user">用户名</Label>
+                  <Input
+                    id="pg-user"
+                    value={pgUser}
+                    onChange={(e) => setPgUser(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pg-pass">密码</Label>
+                  <Input
+                    id="pg-pass"
+                    type="password"
+                    value={pgPassword}
+                    onChange={(e) => setPgPassword(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setConnPhase(1)}
+                  >
+                    上一步
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={handleTestLogin}
+                  >
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    测试连接
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConnPhase(3)}
+                  >
+                    下一步
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {connPhase === 3 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>应用数据库</CardTitle>
+                <CardDescription>
+                  指定本应用使用的数据库名。若库尚不存在，可勾选由向导尝试创建（需账号具备建库权限）。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pg-db">数据库名</Label>
+                  <Input
+                    id="pg-db"
+                    value={databaseName}
+                    onChange={(e) => setDatabaseName(e.target.value)}
+                    placeholder="familybook"
+                    autoComplete="off"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    仅允许字母、数字、下划线；不能与系统保留名冲突（勿使用 postgres
+                    作为业务库名）。
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="pg-createdb"
+                    checked={createDbIfMissing}
+                    onCheckedChange={(c) =>
+                      setCreateDbIfMissing(c === true)
+                    }
+                  />
+                  <Label
+                    htmlFor="pg-createdb"
+                    className="text-sm font-normal leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                  >
+                    若不存在则尝试创建数据库
+                  </Label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => setConnPhase(2)}
+                  >
+                    上一步
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={handleTestTargetDb}
+                  >
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    测试连接
+                  </Button>
+                  <Button type="button" disabled={busy} onClick={handleSaveConnection}>
+                    {busy ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    保存并继续
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+        </>
       ) : null}
 
       {step === "schema" ? (

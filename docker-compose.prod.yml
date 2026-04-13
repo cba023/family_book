@@ -35,6 +35,8 @@ services:
       - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-陈}
       - DATABASE_URL=${DATABASE_URL:-postgresql://genealogy:genealogy@postgres:5432/genealogy}
       - AUTH_SECRET=${AUTH_SECRET}
+      # HTTP 直访时须为 1；前面有 HTTPS 终止时可设为 0 以使用 Secure Cookie
+      - AUTH_INSECURE_COOKIE=${AUTH_INSECURE_COOKIE:-1}
     depends_on:
       postgres:
         condition: service_healthy
