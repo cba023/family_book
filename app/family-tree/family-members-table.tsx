@@ -39,6 +39,7 @@ import {
   fetchMemberById,
 } from "./actions";
 import { ImportMembersDialog } from "./import-members-dialog";
+import { GedcomImportExport } from "./gedcom-import-export";
 import { FatherCombobox } from "./father-combobox";
 import { RichTextEditor } from "@/components/rich-text/editor";
 import { RichTextViewer } from "@/components/rich-text/viewer";
@@ -343,6 +344,7 @@ export function FamilyMembersTable({
         {canEdit && (
           <div className="flex gap-2 flex-wrap w-full lg:w-auto">
             <ImportMembersDialog onSuccess={() => router.refresh()} />
+            <GedcomImportExport onSuccess={() => router.refresh()} />
             
             <Button onClick={handleOpenAddDialog}>
               <Plus className="h-4 w-4 mr-2" />

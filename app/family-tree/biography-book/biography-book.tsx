@@ -113,6 +113,22 @@ const MemberPage = memo(function MemberPage({
                     </div>
                     <div className="space-y-0.5">
                         <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                            世代
+                        </span>
+                        <p className="text-sm text-stone-700">
+                            {member.generation || "未记录"}
+                        </p>
+                    </div>
+                    <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
+                            排行
+                        </span>
+                        <p className="text-sm text-stone-700">
+                            {member.sibling_order || "未记录"}
+                        </p>
+                    </div>
+                    <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
                             生辰
                         </span>
                         <p className="text-sm text-stone-700">
@@ -140,7 +156,7 @@ const MemberPage = memo(function MemberPage({
                     {member.official_position && (
                         <div className="space-y-0.5 col-span-2">
                             <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">
-                                官职/头衔
+                                职业
                             </span>
                             <p className="text-sm font-medium text-stone-800">
                                 {member.official_position}

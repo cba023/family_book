@@ -4,6 +4,7 @@ import { requireUser, requireAdmin, numId } from "@/lib/auth/session";
 import { formatActionError } from "@/lib/format-action-error";
 import { query, queryOne, getPool } from "@/lib/pg";
 import { revalidatePath } from "next/cache";
+import { exportToGedcom, parseGedcom } from "@/lib/gedcom";
 
 export interface FamilyMember {
   id: number;
@@ -628,6 +629,112 @@ export async function exportFamilyMembersToJson(): Promise<{
     console.error("Error exporting family members:", error);
     return {
       data: [],
+      error: formatActionError(error),
+    };
+  }
+}
+
+export async function exportFamilyMembersToGedcom(familyName: string): Promise<{
+  content: string;
+  error: string | null;
+}> {
+  const { user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { content: "", error: authError };
+  }
+
+  try {
+    const { data, error } = await fetchFamilyMembers(1, 10000, "");
+    if (error) {
+      return { content: "", error };
+    }
+
+    const gedcomContent = exportToGedcom(data, { familyName });
+    return { content: gedcomContent, error: null };
+  } catch (error) {
+    console.error("Error exporting to GEDCOM:", error);
+    return {
+      content: "",
+      error: formatActionError(error),
+    };
+  }
+}
+
+export async function importFamilyMembersFromGedcom(gedcomContent: string): Promise<{
+  success: boolean;
+  count: number;
+  error: string | null;
+}> {
+  const { user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { success: false, count: 0, error: authError };
+  }
+
+  try {
+    const members = parseGedcom(gedcomContent);
+    
+    // 批量导入成员
+    const pool = getPool();
+    await pool.query("BEGIN");
+    
+    // 第一步：导入所有成员，不包含关系
+    const memberIdMap = new Map<number, number>(); // 临时 ID -> 实际数据库 ID
+    for (const member of members) {
+      const { rows } = await pool.query(
+        `INSERT INTO family_members (
+          user_id, name, generation, sibling_order, father_id, gender, 
+          official_position, is_alive, spouse_id, is_married_in, 
+          remarks, birthday, death_date, residence_place
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        RETURNING id`,
+        [
+          user.id, // 当前用户的 ID
+          member.name,
+          member.generation,
+          member.sibling_order,
+          null, // 先设为 null，稍后更新
+          member.gender,
+          member.official_position,
+          member.is_alive,
+          null, // 先设为 null，稍后更新
+          member.is_married_in,
+          member.remarks,
+          member.birthday,
+          member.death_date,
+          member.residence_place
+        ]
+      );
+      if (rows.length > 0) {
+        memberIdMap.set(member.id, rows[0].id);
+      }
+    }
+    
+    // 第二步：更新关系
+    for (const member of members) {
+      const actualId = memberIdMap.get(member.id);
+      if (actualId) {
+        const actualFatherId = member.father_id ? memberIdMap.get(member.father_id) : null;
+        const actualSpouseId = member.spouse_id ? memberIdMap.get(member.spouse_id) : null;
+        
+        await pool.query(
+          `UPDATE family_members 
+           SET father_id = $1, spouse_id = $2 
+           WHERE id = $3`,
+          [actualFatherId, actualSpouseId, actualId]
+        );
+      }
+    }
+    
+    const count = members.length;
+    
+    await pool.query("COMMIT");
+    revalidatePath("/family-tree", "layout");
+    return { success: true, count, error: null };
+  } catch (error) {
+    console.error("Error importing from GEDCOM:", error);
+    return {
+      success: false,
+      count: 0,
       error: formatActionError(error),
     };
   }
