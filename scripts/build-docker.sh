@@ -17,7 +17,7 @@ echo ""
 
 # 获取版本号
 VERSION=${1:-latest}
-IMAGE_NAME=${2:-genealogy}
+IMAGE_NAME=${2:-familybook}
 
 echo -e "${YELLOW}构建信息:${NC}"
 echo "  镜像名: $IMAGE_NAME"
@@ -57,7 +57,7 @@ if [ $? -eq 0 ]; then
     docker images "$IMAGE_NAME" --format "  {{.Repository}}:{{.Tag}} | {{.Size}} | {{.CreatedAt}}"
     echo ""
     echo -e "${YELLOW}运行命令:${NC}"
-    echo "  docker run -d -p 3000:3000 -v \$(pwd)/data:/app/data $IMAGE_NAME:$VERSION"
+    echo "  docker run -d -p 3000:3000 -v familybook-data:/app/data $IMAGE_NAME:$VERSION"
     echo ""
     echo -e "${YELLOW}或使用 Docker Compose:${NC}"
     echo "  docker-compose up -d"

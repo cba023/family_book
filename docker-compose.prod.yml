@@ -19,15 +19,16 @@ services:
     restart: always
 
   app:
+    image: familybook:latest
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-    image: genealogy:latest
-    container_name: genealogy
+    container_name: familybook
     ports:
       - "3000:3000"
     volumes:
+      - familybook-app-data:/app/data
       - genealogy-backups:/app/backups
     environment:
       - NODE_ENV=production
@@ -60,6 +61,8 @@ services:
 
 volumes:
   genealogy-pg-data:
+    driver: local
+  familybook-app-data:
     driver: local
   genealogy-backups:
     driver: local

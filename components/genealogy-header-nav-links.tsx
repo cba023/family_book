@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 type Props = {
   /** super_admin / admin：可维护族谱数据 */
@@ -19,35 +20,46 @@ export function GenealogyHeaderNavLinks({
   blogActive = false,
   isLoggedIn = false,
 }: Props) {
+  const pathname = usePathname();
+
+  const isActive = (path: string) => {
+    if (path === "/blog") {
+      return blogActive || pathname === "/blog";
+    }
+    return pathname === path;
+  };
+
+  const getLinkClass = (path: string) => {
+    return isActive(path)
+      ? "text-primary font-semibold border-b-2 border-primary pb-1"
+      : "hover:text-primary transition-colors pb-1";
+  };
+
   return (
     <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
       <Link
         href="/blog"
-        className={
-          blogActive
-            ? "text-primary font-semibold"
-            : "hover:text-primary transition-colors"
-        }
+        className={getLinkClass("/blog")}
       >
         家族博客
       </Link>
       {/* 登录用户都可以看到成员列表，但只有管理员可以编辑 */}
       {isLoggedIn && (
-        <Link href="/family-tree" className="hover:text-primary transition-colors">
+        <Link href="/family-tree" className={getLinkClass("/family-tree")}>
           成员列表
         </Link>
       )}
 
-      <Link href="/family-tree/graph" className="hover:text-primary transition-colors">
+      <Link href="/family-tree/graph" className={getLinkClass("/family-tree/graph")}>
         族谱视图
       </Link>
-      <Link href="/family-tree/statistics" className="hover:text-primary transition-colors">
+      <Link href="/family-tree/statistics" className={getLinkClass("/family-tree/statistics")}>
         统计分析
       </Link>
-      <Link href="/family-tree/biography-book" className="hover:text-primary transition-colors">
+      <Link href="/family-tree/biography-book" className={getLinkClass("/family-tree/biography-book")}>
         生平册
       </Link>
-      <Link href="/family-tree/timeline" className="hover:text-primary transition-colors">
+      <Link href="/family-tree/timeline" className={getLinkClass("/family-tree/timeline")}>
         时间轴
       </Link>
     </nav>

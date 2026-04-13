@@ -126,17 +126,40 @@ docker compose -f docker-compose.prod.yml up -d --build
 ### 方式二：仅构建应用镜像
 
 ```bash
-docker build -t family-book:latest --target production .
+npm run docker:build
+# 或: ./scripts/build-docker.sh
+# 或: docker build -t familybook:latest --target production .
 ```
+
+**导出为本地 tar 包**（U 盘 / 内网离线机）：
+
+```bash
+npm run docker:build
+npm run docker:save
+# 生成 dist/familybook-latest.tar；自定义路径: ./scripts/docker-save-tar.sh /path/out.tar
+```
+
+目标机：`docker load -i familybook-latest.tar`，再 `docker run` 或 compose（需自备数据库与 `AUTH_SECRET` 等）。
+
+**推送到私有仓库**（阿里云 ACR、Harbor、自建 Registry 等）前先 `docker login`，再：
+
+```bash
+./scripts/push-docker.sh <仓库前缀>
+# 例如: ./scripts/push-docker.sh registry.cn-hangzhou.aliyuncs.com/你的命名空间
+# 将推送: <前缀>/familybook:latest 与指定版本
+```
+
+服务器上设置 `FAMILYBOOK_IMAGE=<前缀>/familybook:latest` 后，可在 compose 里把 `app.image` 改为该变量并去掉 `build` 段，或 `docker pull` 后 `docker run`。
 
 运行时需自行提供 PostgreSQL，并注入环境变量，例如：
 
 ```bash
-docker run -d --name family-book-app -p 3000:3000 \
+docker run -d --name familybook-app -p 3000:3000 \
+  -v familybook-data:/app/data \
   -e DATABASE_URL='postgresql://用户:密码@数据库主机:5432/库名' \
   -e AUTH_SECRET='至少16位随机串' \
   -e NEXT_PUBLIC_FAMILY_SURNAME='陈' \
-  family-book:latest
+  familybook:latest
 ```
 
 `DATABASE_URL` 中的主机名在容器网络内应指向可解析的 Postgres 服务（例如同一 compose 中的服务名 `postgres`）。
@@ -147,7 +170,7 @@ docker run -d --name family-book-app -p 3000:3000 \
 |------|------|
 | Postgres 数据卷 | Compose 中 `postgres_data` / `genealogy-pg-data` 等，勿删以免丢库 |
 | `backups/` | 可选挂载，配合 `npm run db:backup`（需宿主机有 `pg_dump`） |
-| `/app/data`（容器内） | 向导可能写入 `runtime-config.json`；生产建议 **挂载 volume 到 `/app/data`**，避免重启丢本地配置态 |
+| `/app/data`（容器内） | 向导写入 `runtime-config.json`；Compose 已用命名卷 **`familybook-data`** / **`familybook-app-data`** 持久化 |
 
 ### 构建说明
 

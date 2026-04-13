@@ -49,9 +49,10 @@ COPY --from=builder /app/docker/postgres/init.sql ./docker/postgres/init.sql
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-USER nextjs
+# /app 本身多为 root 属主，需在切换用户前创建可写目录
+RUN mkdir -p backups data && chown -R nextjs:nodejs backups data
 
-RUN mkdir -p backups
+USER nextjs
 
 EXPOSE 3000
 

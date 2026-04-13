@@ -1,7 +1,11 @@
 #!/bin/bash
-
-# Docker 镜像推送脚本
-# 用于推送到 Docker Hub 或其他仓库
+# 推送到私有仓库（或 Docker Hub）
+# 用法:
+#   ./scripts/push-docker.sh <仓库前缀> [版本]
+# 示例:
+#   ./scripts/push-docker.sh registry.cn-hangzhou.aliyuncs.com/myns           # familybook:latest
+#   ./scripts/push-docker.sh harbor.company.local/library/familybook 1.2.0
+# 推送前请先: docker login <仓库主机>
 
 set -e
 
@@ -10,45 +14,36 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-REGISTRY=${1:-""}  # 例如: docker.io/username
-IMAGE_NAME=${2:-genealogy}
-VERSION=${3:-latest}
+REGISTRY_PREFIX=${1:?请传入仓库前缀，例如 registry.example.com/namespace}
+VERSION=${2:-latest}
+IMAGE_NAME=${IMAGE_NAME:-familybook}
 
-if [ -n "$REGISTRY" ]; then
-    FULL_IMAGE_NAME="$REGISTRY/$IMAGE_NAME"
-else
-    FULL_IMAGE_NAME="$IMAGE_NAME"
-fi
+FULL_IMAGE="$REGISTRY_PREFIX/$IMAGE_NAME"
 
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
-echo -e "${GREEN}      Docker 镜像推送工具${NC}"
+echo -e "${GREEN}      Docker 镜像推送（私有化仓库）${NC}"
 echo -e "${GREEN}═══════════════════════════════════════${NC}"
 echo ""
-echo -e "${YELLOW}推送信息:${NC}"
-echo "  仓库: ${REGISTRY:-'(默认)'})"
-echo "  镜像: $FULL_IMAGE_NAME"
-echo "  版本: $VERSION"
+echo -e "${YELLOW}目标:${NC} $FULL_IMAGE:$VERSION 与 $FULL_IMAGE:latest"
 echo ""
 
-# 检查是否登录
-if ! docker info | grep -q "Username"; then
-    echo -e "${YELLOW}请先登录 Docker Hub:${NC}"
-    echo "  docker login"
-    exit 1
+if ! docker image inspect "$IMAGE_NAME:$VERSION" &>/dev/null; then
+  echo -e "${RED}本地不存在镜像 $IMAGE_NAME:$VERSION，请先执行:${NC}"
+  echo "  ./scripts/build-docker.sh $VERSION"
+  exit 1
 fi
 
-# 标记镜像
-echo "🏷️  标记镜像..."
-docker tag "$IMAGE_NAME:$VERSION" "$FULL_IMAGE_NAME:$VERSION"
-docker tag "$IMAGE_NAME:$VERSION" "$FULL_IMAGE_NAME:latest"
+echo "🏷️  标记..."
+docker tag "$IMAGE_NAME:$VERSION" "$FULL_IMAGE:$VERSION"
+docker tag "$IMAGE_NAME:$VERSION" "$FULL_IMAGE:latest"
 
-# 推送镜像
-echo "📤 推送镜像..."
-docker push "$FULL_IMAGE_NAME:$VERSION"
-docker push "$FULL_IMAGE_NAME:latest"
+echo "📤 推送..."
+docker push "$FULL_IMAGE:$VERSION"
+docker push "$FULL_IMAGE:latest"
 
 echo ""
-echo -e "${GREEN}✅ 推送成功!${NC}"
+echo -e "${GREEN}✅ 推送完成${NC}"
 echo ""
-echo "拉取命令:"
-echo "  docker pull $FULL_IMAGE_NAME:$VERSION"
+echo "在服务器拉取并运行示例:"
+echo "  docker pull $FULL_IMAGE:$VERSION"
+echo "  docker run -d -p 3000:3000 -e DATABASE_URL=... -e AUTH_SECRET=... $FULL_IMAGE:$VERSION"

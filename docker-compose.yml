@@ -21,14 +21,16 @@ services:
     restart: unless-stopped
 
   app:
+    image: familybook:latest
     build:
       context: .
       dockerfile: Dockerfile
       target: production
-    container_name: genealogy-app
+    container_name: familybook-app
     ports:
       - "3000:3000"
     volumes:
+      - familybook-data:/app/data
       - ./backups:/app/backups
     environment:
       - NODE_ENV=production
@@ -101,3 +103,4 @@ services:
 
 volumes:
   postgres_data:
+  familybook-data:
