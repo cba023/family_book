@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { LoginDialog } from "@/components/login-dialog";
 import { checkClientAuth } from "@/app/auth/actions";
+import { refreshSessionAfterLogin } from "@/lib/client/refresh-session-after-login";
 
 export default function NewBlogPostPage() {
   const router = useRouter();
@@ -61,6 +62,7 @@ export default function NewBlogPostPage() {
   const handleLoginSuccess = () => {
     setIsLoggedIn(true);
     setLoginOpen(false);
+    refreshSessionAfterLogin(router);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

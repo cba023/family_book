@@ -77,6 +77,7 @@ npm install
 | `DATABASE_URL` | PostgreSQL 连接串 |
 | `AUTH_SECRET` | 至少 16 字符，用于签发登录 Cookie |
 | `AUTH_INSECURE_COOKIE` | 设为 `1` 时允许在 **HTTP**（非 HTTPS）下写入会话 Cookie；Docker 常用 `http://IP:3000` 访问时需开启。已用 HTTPS 反向代理时可不设或设为 `0` |
+| `SERVER_ACTIONS_ALLOWED_ORIGINS` | **构建镜像时**生效，逗号分隔的公网域名（如 `example.com,www.example.com`）。经反向代理登录无效时用于放宽 Next.js Server Actions 的 Origin 校验（与 `Host` / `X-Forwarded-Host` 对齐或显式白名单） |
 | `NEXT_PUBLIC_FAMILY_SURNAME` | 站点展示的姓氏，默认「陈」 |
 
 ### 4. 数据库表结构
@@ -166,6 +167,31 @@ docker run -d --name familybook-app -p 3000:3000 \
 ```
 
 `DATABASE_URL` 中的主机名在容器网络内应指向可解析的 Postgres 服务（例如同一 compose 中的服务名 `postgres`）。
+
+### 公网与反向代理（登录后仍显示未登录）
+
+局域网直连容器往往正常，经 **Nginx / 云 CDN** 走公网时常见问题有两类：
+
+1. **转发头不一致**  
+   浏览器里的访问域名（`Origin`）须与后端看到的 `Host` 或 `X-Forwarded-Host` 一致（注意 **www** 与裸域是否混用）。反代建议：
+
+   ```nginx
+   proxy_set_header Host $host;
+   proxy_set_header X-Forwarded-Host $host;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   ```
+
+   若对 HTML 做了 **共享缓存**，可能一直返回「未登录」的旧页面；应对页面关闭缓存或保证 `Cache-Control: private`。
+
+2. **Next.js Server Actions 的 Origin 校验**  
+   仍报错或登录无会话时，在**构建镜像前**设置白名单并重新 build（Compose 已把该变量传入 `build.args`）：
+
+   ```bash
+   export SERVER_ACTIONS_ALLOWED_ORIGINS='example.com,www.example.com'
+   docker compose build --no-cache app
+   ```
+
+   或使用：`docker build --build-arg SERVER_ACTIONS_ALLOWED_ORIGINS='example.com,www.example.com' -t familybook:amd64 --target production .`
 
 ### 持久化与数据目录
 

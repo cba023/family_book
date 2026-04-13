@@ -26,6 +26,8 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+      args:
+        SERVER_ACTIONS_ALLOWED_ORIGINS: ${SERVER_ACTIONS_ALLOWED_ORIGINS:-}
     container_name: familybook-app
     ports:
       - "3000:3000"

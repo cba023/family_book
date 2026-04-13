@@ -9,10 +9,25 @@ function authConfigured(): boolean {
   );
 }
 
+/**
+ * 避免公网 CDN / 浏览器缓存「未登录」时的 HTML，导致登录后 reload 仍显示未登录。
+ */
+function applyPrivateNoStore(request: NextRequest, res: NextResponse) {
+  if (request.method !== "GET") return res;
+  const path = request.nextUrl.pathname;
+  if (path.startsWith("/_next") || path.startsWith("/api")) return res;
+  res.headers.set(
+    "Cache-Control",
+    "private, no-store, must-revalidate",
+  );
+  return res;
+}
+
 function nextWithPathname(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", request.nextUrl.pathname);
-  return NextResponse.next({ request: { headers: requestHeaders } });
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
+  return applyPrivateNoStore(request, res);
 }
 
 export async function updateSession(request: NextRequest) {
@@ -49,7 +64,8 @@ export async function updateSession(request: NextRequest) {
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
-    return NextResponse.redirect(url);
+    const redirectRes = NextResponse.redirect(url);
+    return applyPrivateNoStore(request, redirectRes);
   }
 
   return nextWithPathname(request);

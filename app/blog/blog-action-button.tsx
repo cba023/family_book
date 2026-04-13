@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { refreshSessionAfterLogin } from "@/lib/client/refresh-session-after-login";
 import { Button } from "@/components/ui/button";
 import { Plus, Lock, LogIn } from "lucide-react";
 import { LoginDialog } from "@/components/login-dialog";
 import { checkClientAuth } from "@/app/auth/actions";
 
 export function BlogActionButton() {
+  const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
 
@@ -42,7 +45,7 @@ export function BlogActionButton() {
         onOpenChange={setLoginOpen}
         onSuccess={() => {
           setIsLoggedIn(true);
-          window.location.reload();
+          refreshSessionAfterLogin(router);
         }}
       />
     </>

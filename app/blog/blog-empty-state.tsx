@@ -7,6 +7,7 @@ import { Plus, Lock, LogIn } from "lucide-react";
 import { LoginDialog } from "@/components/login-dialog";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { refreshSessionAfterLogin } from "@/lib/client/refresh-session-after-login";
 
 interface BlogEmptyStateProps {
   isLoggedIn: boolean;
@@ -17,7 +18,7 @@ export function BlogEmptyState({ isLoggedIn }: BlogEmptyStateProps) {
   const router = useRouter();
 
   const handleLoginSuccess = () => {
-    router.refresh();
+    refreshSessionAfterLogin(router);
   };
 
   if (isLoggedIn) {

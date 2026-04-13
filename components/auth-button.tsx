@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { refreshSessionAfterLogin } from "@/lib/client/refresh-session-after-login";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { LogoutButton } from "./logout-button";
@@ -34,10 +36,10 @@ function canMaintain(role: string | null): boolean {
 
 export function AuthButton({ user, profile }: AuthButtonProps) {
   const [loginOpen, setLoginOpen] = useState(false);
+  const router = useRouter();
 
   const handleLoginSuccess = () => {
-    // 登录/注册成功后刷新页面，更新为已登录状态
-    window.location.reload();
+    refreshSessionAfterLogin(router);
   };
 
   if (!user) {

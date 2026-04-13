@@ -26,7 +26,9 @@ import {
 } from "@/components/ui/popover";
 import { TimelineNode, type TimelineNodeData } from "./timeline-node";
 import { YearNode, type YearNodeData } from "./year-node";
+import { useRouter } from "next/navigation";
 import { LoginDialog } from "@/components/login-dialog";
+import { refreshSessionAfterLogin } from "@/lib/client/refresh-session-after-login";
 
 interface TimelineMember {
   id: number;
@@ -53,6 +55,7 @@ const TRACK_GAP = 2; // years gap between members on same track
 const HEADER_HEIGHT = 40;
 
 function TimelineFlow({ initialData, requireAuth }: TimelineClientProps) {
+  const router = useRouter();
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -381,7 +384,7 @@ function TimelineFlow({ initialData, requireAuth }: TimelineClientProps) {
       <LoginDialog
         open={loginOpen}
         onOpenChange={setLoginOpen}
-        onSuccess={() => window.location.reload()}
+        onSuccess={() => refreshSessionAfterLogin(router)}
       />
     </div>
   );

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { refreshSessionAfterLogin } from "@/lib/client/refresh-session-after-login";
 import { Lock, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LoginDialog } from "./login-dialog";
@@ -15,10 +17,10 @@ export function LoginPrompt({
   className = "",
 }: LoginPromptProps) {
   const [loginOpen, setLoginOpen] = useState(false);
+  const router = useRouter();
 
   const handleLoginSuccess = () => {
-    // 登录/注册成功后刷新页面，更新为已登录状态
-    window.location.reload();
+    refreshSessionAfterLogin(router);
   };
 
   return (

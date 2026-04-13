@@ -49,7 +49,9 @@ export function LoginForm({
         return;
       }
       router.refresh();
-      router.push("/blog");
+      window.setTimeout(() => {
+        window.location.href = "/blog";
+      }, 0);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
