@@ -5,6 +5,8 @@ import { formatActionError } from "@/lib/format-action-error";
 import { query, queryOne, getPool } from "@/lib/pg";
 import { revalidatePath } from "next/cache";
 import { exportToGedcom, parseGedcom } from "@/lib/gedcom";
+import PDFDocument from "pdfkit";
+import { FAMILY_SURNAME } from "@/lib/utils";
 
 export interface FamilyMember {
   id: number;
@@ -610,20 +612,212 @@ export async function batchCreateFamilyMembers(
   }
 }
 
-export async function exportFamilyMembersToJson(): Promise<{
-  data: Record<string, unknown>[];
-  error: string | null;
+export async function exportFamilyToPDF(): Promise<{
+  success: boolean;
+  data?: Uint8Array;
+  filename?: string;
+  error?: string;
 }> {
   const { user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { success: false, error: authError || "需要管理员权限" };
+  }
+
+  try {
+    const pool = getPool();
+    const { rows: members } = await pool.query(
+      `SELECT 
+        fm.*,
+        f.name as father_name,
+        s.name as spouse
+       FROM family_members fm
+       LEFT JOIN family_members f ON fm.father_id = f.id
+       LEFT JOIN family_members s ON fm.spouse_id = s.id
+       WHERE fm.user_id = $1
+       ORDER BY fm.generation, fm.sibling_order`,
+      [user.id]
+    );
+
+    if (members.length === 0) {
+      return { success: false, error: "没有可导出的成员数据" };
+    }
+
+    // 使用系统字体或内置字体
+    const doc = new PDFDocument({
+      size: "A4",
+      margin: 50,
+      info: {
+        Title: `${FAMILY_SURNAME}氏族谱`,
+        Author: "Family Book",
+      },
+    });
+
+    const chunks: Buffer[] = [];
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+
+    // 封面
+    doc
+      .fillColor("#8B4513")
+      .fontSize(36)
+      .font("Helvetica-Bold")
+      .text(`${FAMILY_SURNAME}氏族谱`, 0, 200, { align: "center" })
+      .moveDown();
+
+    doc
+      .fillColor("#666")
+      .fontSize(14)
+      .font("Helvetica")
+      .text(`共收录 ${members.length} 位族人`, { align: "center" })
+      .moveDown(2);
+
+    doc
+      .fillColor("#999")
+      .fontSize(12)
+      .text(`导出时间：${new Date().toLocaleDateString("zh-CN")}`, { align: "center" })
+      .moveDown(4);
+
+    // 目录页
+    doc.addPage();
+    doc
+      .fillColor("#333")
+      .fontSize(24)
+      .font("Helvetica-Bold")
+      .text("目  录", 50, 50)
+      .moveDown();
+
+    doc
+      .fontSize(12)
+      .font("Helvetica")
+      .fillColor("#333");
+
+    let yPos = 100;
+    members.forEach((member, index) => {
+      doc.text(
+        `${index + 1}. ${member.name}  (第${member.generation || "?"}世  ${member.gender || ""})`,
+        50,
+        yPos
+      );
+      yPos += 22;
+      if (yPos > 750) {
+        doc.addPage();
+        yPos = 50;
+      }
+    });
+
+    // 成员详情页
+    members.forEach((member) => {
+      doc.addPage();
+
+      doc
+        .fillColor("#8B4513")
+        .fontSize(20)
+        .font("Helvetica-Bold")
+        .text(member.name, 50, 50);
+
+      doc
+        .fontSize(10)
+        .font("Helvetica")
+        .fillColor("#666");
+
+      const deathInfo = member.is_alive ? "" : ` - ${member.death_date || "不详"}`;
+      const info = [
+        `世    代：第 ${member.generation || "?"} 世`,
+        `排    行：第 ${member.sibling_order || "?"} 位`,
+        `性    别：${member.gender || "不详"}`,
+        `生    卒：${member.birthday || "不详"}${deathInfo}`,
+        `居住地：${member.residence_place || "不详"}`,
+        `职    业：${member.official_position || "不详"}`,
+        `父    亲：${member.father_name || "不详"}`,
+        `配    偶：${member.spouse || "不详"}`,
+      ];
+
+      let infoY = 90;
+      info.forEach((line) => {
+        doc.text(line, 50, infoY);
+        infoY += 18;
+      });
+
+      if (member.remarks) {
+        doc
+          .fillColor("#333")
+          .fontSize(12)
+          .font("Helvetica-Bold")
+          .text("生平事迹", 50, infoY + 20);
+
+        doc
+          .fontSize(10)
+          .font("Helvetica")
+          .fillColor("#555")
+          .text(member.remarks, 50, infoY + 45, {
+            width: 495,
+            align: "justify",
+          });
+      }
+
+      doc
+        .fillColor("#999")
+        .fontSize(8)
+        .text(
+          `${FAMILY_SURNAME}氏族谱 - ${member.name}`,
+          50,
+          780,
+          { align: "center" }
+        );
+    });
+
+    doc.end();
+
+    await new Promise<void>((resolve, reject) => {
+      doc.on("end", () => resolve());
+      doc.on("error", reject);
+    });
+
+    const pdfBuffer = Buffer.concat(chunks);
+    const filename = `${FAMILY_SURNAME}氏族谱_${new Date().toISOString().split("T")[0]}.pdf`;
+
+    return {
+      success: true,
+      data: new Uint8Array(pdfBuffer),
+      filename,
+    };
+  } catch (error) {
+    console.error("PDF导出失败:", error);
+    return { success: false, error: "导出失败，请重试" };
+  }
+}
+
+export async function exportFamilyMembersToJson(): Promise<{
+  data: FamilyMember[];
+  error: string | null;
+}> {
+  const { user, error: authError } = await requireUser();
   if (!user) {
     return { data: [], error: authError };
   }
 
   try {
-    const data = await query<Record<string, unknown>>(
-      `SELECT * FROM family_members
-       ORDER BY generation ASC NULLS FIRST, sibling_order ASC NULLS FIRST`,
+    const rows = await query<Record<string, unknown>>(
+      `SELECT fm.*, f.name as father_name, s.name as spouse_name
+       FROM family_members fm
+       LEFT JOIN family_members f ON fm.father_id = f.id
+       LEFT JOIN family_members s ON fm.spouse_id = s.id
+       ORDER BY fm.generation ASC NULLS FIRST, fm.sibling_order ASC NULLS FIRST`,
     );
+    
+    const fatherMap: Record<number, string> = {};
+    const spouseMap: Record<number, string> = {};
+    
+    rows.forEach((item) => {
+      const id = numId(item.id);
+      if (item.father_name) {
+        fatherMap[id] = String(item.father_name);
+      }
+      if (item.spouse_name) {
+        spouseMap[id] = String(item.spouse_name);
+      }
+    });
+    
+    const data = rows.map((item) => mapMemberRow(item, fatherMap, spouseMap));
     return { data, error: null };
   } catch (error) {
     console.error("Error exporting family members:", error);
