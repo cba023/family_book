@@ -3,8 +3,8 @@
 import { cookies } from "next/headers";
 import { queryOne, withTransaction } from "@/lib/pg";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
-import { signSessionToken } from "@/lib/auth/jwt";
-import { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SEC } from "@/lib/auth/constants";
+import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
+import { setSessionCookieForUser } from "@/lib/auth/cookie-session";
 import {
   validateUsernameForRegister,
   validateOptionalFullName,
@@ -13,22 +13,6 @@ import {
 import { getSessionUserId } from "@/lib/auth/session";
 
 type UserAuthRow = { id: string; password_hash: string };
-
-function sessionCookieOptions() {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    maxAge: SESSION_MAX_AGE_SEC,
-    path: "/",
-  };
-}
-
-async function setSessionCookie(userId: string) {
-  const token = await signSessionToken(userId);
-  const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, token, sessionCookieOptions());
-}
 
 export async function signIn(
   username: string,
@@ -56,7 +40,7 @@ export async function signIn(
   if (!ok) {
     return { error: "账户名或密码错误" };
   }
-  await setSessionCookie(row.id);
+  await setSessionCookieForUser(row.id);
   return {};
 }
 
@@ -109,7 +93,7 @@ export async function signUp(
       );
       return id;
     });
-    await setSessionCookie(newId);
+    await setSessionCookieForUser(newId);
     return {};
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);

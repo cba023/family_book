@@ -24,6 +24,7 @@ COPY . .
 
 ARG NEXT_PUBLIC_FAMILY_SURNAME=陈
 ENV NEXT_PUBLIC_FAMILY_SURNAME=$NEXT_PUBLIC_FAMILY_SURNAME
+ENV SKIP_SETUP_GATE=1
 
 RUN npm run build
 
@@ -44,6 +45,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/docker/postgres/init.sql ./docker/postgres/init.sql
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 

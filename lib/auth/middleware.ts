@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { verifySessionTokenOptional } from "@/lib/auth/jwt";
+import { verifySessionTokenOptional } from "@/lib/auth/jwt-edge";
 import { SESSION_COOKIE_NAME } from "@/lib/auth/constants";
 
 function authConfigured(): boolean {
@@ -9,9 +9,15 @@ function authConfigured(): boolean {
   );
 }
 
+function nextWithPathname(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  return NextResponse.next({ request: { headers: requestHeaders } });
+}
+
 export async function updateSession(request: NextRequest) {
   if (!authConfigured()) {
-    return NextResponse.next({ request });
+    return nextWithPathname(request);
   }
 
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
@@ -38,12 +44,13 @@ export async function updateSession(request: NextRequest) {
     !isPublicPath &&
     !user &&
     !path.startsWith("/noauth") &&
-    !path.startsWith("/auth")
+    !path.startsWith("/auth") &&
+    !path.startsWith("/setup")
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
-  return NextResponse.next({ request });
+  return nextWithPathname(request);
 }

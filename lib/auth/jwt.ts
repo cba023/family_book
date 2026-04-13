@@ -1,7 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
+import { getEffectiveAuthSecret } from "@/lib/runtime-config";
 
 function getSecretKey(): Uint8Array {
-  const raw = process.env.AUTH_SECRET;
+  const raw = getEffectiveAuthSecret();
   if (!raw || raw.length < 16) {
     throw new Error(
       "请配置 AUTH_SECRET（至少 16 字符），用于签发登录会话",
@@ -23,22 +24,6 @@ export async function verifySessionToken(
 ): Promise<{ sub: string } | null> {
   try {
     const { payload } = await jwtVerify(token, getSecretKey());
-    const sub = payload.sub;
-    if (typeof sub !== "string" || !sub) return null;
-    return { sub };
-  } catch {
-    return null;
-  }
-}
-
-/** 中间件用：无密钥或非法 token 时不抛错 */
-export async function verifySessionTokenOptional(
-  token: string | undefined,
-): Promise<{ sub: string } | null> {
-  const raw = process.env.AUTH_SECRET;
-  if (!raw || raw.length < 16 || !token) return null;
-  try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(raw));
     const sub = payload.sub;
     if (typeof sub !== "string" || !sub) return null;
     return { sub };

@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** 会话与数据库是否已配置（构建/可选检查） */
+/** 构建/文档用：中间件仅识别 process.env 中的配置 */
 export const hasEnvVars =
   Boolean(process.env.DATABASE_URL) &&
   Boolean(process.env.AUTH_SECRET && process.env.AUTH_SECRET.length >= 16);

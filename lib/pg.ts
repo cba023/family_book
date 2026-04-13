@@ -1,14 +1,26 @@
 import { Pool, type QueryResultRow } from "pg";
+import { getEffectiveDatabaseUrl } from "@/lib/runtime-config";
 
 let pool: Pool | null = null;
+let poolUrl: string | null = null;
+
+export function resetPgPool(): void {
+  if (pool) {
+    void pool.end();
+  }
+  pool = null;
+  poolUrl = null;
+}
 
 export function getPool(): Pool {
-  if (!pool) {
-    const connectionString = process.env.DATABASE_URL;
-    if (!connectionString) {
-      throw new Error("缺少环境变量 DATABASE_URL（PostgreSQL 连接串）");
-    }
-    pool = new Pool({ connectionString, max: 15 });
+  const connectionString = getEffectiveDatabaseUrl();
+  if (!connectionString) {
+    throw new Error("未配置数据库：请完成初始化向导或设置 DATABASE_URL");
+  }
+  if (!pool || poolUrl !== connectionString) {
+    if (pool) void pool.end();
+    poolUrl = connectionString;
+    pool = new Pool({ connectionString: poolUrl, max: 15 });
   }
   return pool;
 }
