@@ -1,4 +1,4 @@
-/** PostgREST / Supabase 抛出的常为普通对象，不是 Error 实例 */
+/** 数据库或业务层抛出的常为普通对象，不是 Error 实例 */
 export function formatActionError(error: unknown): string {
   if (error == null) return "未知错误";
   if (typeof error === "string") return error;

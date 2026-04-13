@@ -1,7 +1,7 @@
 "use server";
 
 import { requireUser, getUserRole, numId } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { query, queryOne, getPool } from "@/lib/pg";
 import { formatActionError } from "@/lib/format-action-error";
 import { revalidatePath } from "next/cache";
 import crypto from "crypto";
@@ -22,7 +22,6 @@ export interface BlogPost {
   user_id?: string;
 }
 
-/** 游客与未特指作者均可浏览的文章状态 */
 const PUBLIC_BLOG_STATUSES = ["published", "archived"] as const;
 
 export interface CreateBlogInput {
@@ -55,11 +54,18 @@ function mapPost(row: Record<string, unknown>): BlogPost {
   };
 }
 
-// 生成基于内容+时间戳的唯一 hash，确保每篇文章都有唯一标识
 function generateContentHash(title: string, content: string): string {
   const timestamp = Date.now();
   const data = `${title}:${content}:${timestamp}`;
   return crypto.createHash("sha256").update(data).digest("hex").substring(0, 16);
+}
+
+function bumpViewCount(postId: number) {
+  void getPool()
+    .query(`UPDATE blog_posts SET view_count = view_count + 1 WHERE id = $1`, [
+      postId,
+    ])
+    .catch((err) => console.error("view_count update:", err));
 }
 
 export async function generateSlug(title: string): Promise<string> {
@@ -72,18 +78,15 @@ export async function generateSlug(title: string): Promise<string> {
   return `${baseSlug}-${randomSuffix}`;
 }
 
-/** 博客首页列表：已发布 + 已归档（游客可读，依赖 RLS） */
 export async function fetchBlogPosts(): Promise<BlogPost[]> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("blog_posts")
-      .select("*")
-      .in("status", [...PUBLIC_BLOG_STATUSES])
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-    return (data ?? []).map((row) => mapPost(row as Record<string, unknown>));
+    const rows = await query<Record<string, unknown>>(
+      `SELECT * FROM blog_posts
+       WHERE status = ANY($1::text[])
+       ORDER BY created_at DESC`,
+      [PUBLIC_BLOG_STATUSES],
+    );
+    return rows.map((row) => mapPost(row));
   } catch (error) {
     console.error("Error fetching blog posts:", error);
     return [];
@@ -95,33 +98,30 @@ export async function fetchBlogPostsPaginated(
   pageSize: number = 10,
   status: "draft" | "published" | "archived" = "published",
 ): Promise<{ posts: BlogPost[]; total: number }> {
-  const { supabase, user, error: authError } = await requireUser();
+  const { user, error: authError } = await requireUser();
   if (!user) {
     return { posts: [], total: 0 };
   }
 
   try {
     const offset = (page - 1) * pageSize;
+    const countRow = await queryOne<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM blog_posts WHERE status = $1`,
+      [status],
+    );
+    const total = parseInt(countRow?.n ?? "0", 10);
 
-    const { count, error: cErr } = await supabase
-      .from("blog_posts")
-      .select("*", { count: "exact", head: true })
-      .eq("status", status);
-
-    if (cErr) throw cErr;
-
-    const { data, error } = await supabase
-      .from("blog_posts")
-      .select("*")
-      .eq("status", status)
-      .order("created_at", { ascending: false })
-      .range(offset, offset + pageSize - 1);
-
-    if (error) throw error;
+    const rows = await query<Record<string, unknown>>(
+      `SELECT * FROM blog_posts
+       WHERE status = $1
+       ORDER BY created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [status, pageSize, offset],
+    );
 
     return {
-      posts: (data ?? []).map((row) => mapPost(row as Record<string, unknown>)),
-      total: count ?? 0,
+      posts: rows.map((row) => mapPost(row)),
+      total,
     };
   } catch (error) {
     console.error("Error fetching blog posts:", error);
@@ -129,90 +129,58 @@ export async function fetchBlogPostsPaginated(
   }
 }
 
-// 通过 hash 获取文章（主要访问方式）
 export async function fetchBlogPostByHash(
   hash: string,
 ): Promise<BlogPost | null> {
   try {
-    const supabase = await createClient();
-    const { data: post, error } = await supabase
-      .from("blog_posts")
-      .select("*")
-      .eq("hash", hash)
-      .maybeSingle();
-
-    if (error) throw error;
+    const post = await queryOne<Record<string, unknown>>(
+      `SELECT * FROM blog_posts WHERE hash = $1`,
+      [hash],
+    );
     if (!post) return null;
 
-    const postStatus = post.status as string;
+    const postStatus = String(post.status);
 
-    // 已发布、已归档：游客可读
     if (postStatus === "published" || postStatus === "archived") {
-      // 异步更新浏览数，不阻塞返回
-      supabase
-        .from("blog_posts")
-        .update({
-          view_count: Number(post.view_count ?? 0) + 1,
-        })
-        .eq("id", numId(post.id))
-        .then(({ error: upErr }) => {
-          if (upErr) console.error("view_count update:", upErr);
-        });
-      return mapPost(post as Record<string, unknown>);
+      bumpViewCount(numId(post.id));
+      return mapPost(post);
     }
-    
-    // 草稿只有作者自己能看
+
     const { user } = await requireUser();
-    if (!user || user.id !== post.user_id) {
+    if (!user || user.id !== String(post.user_id)) {
       return null;
     }
-    
-    return mapPost(post as Record<string, unknown>);
+
+    return mapPost(post);
   } catch (error) {
     console.error("Error fetching blog post by hash:", error);
     return null;
   }
 }
 
-// 兼容旧版：通过 slug 获取文章
 export async function fetchBlogPostBySlug(
   slug: string,
 ): Promise<BlogPost | null> {
   try {
-    const supabase = await createClient();
-    const { data: post, error } = await supabase
-      .from("blog_posts")
-      .select("*")
-      .eq("slug", slug)
-      .maybeSingle();
-
-    if (error) throw error;
+    const post = await queryOne<Record<string, unknown>>(
+      `SELECT * FROM blog_posts WHERE slug = $1`,
+      [slug],
+    );
     if (!post) return null;
 
-    const postStatus = post.status as string;
+    const postStatus = String(post.status);
 
-    // 已发布、已归档：游客可读
     if (postStatus === "published" || postStatus === "archived") {
-      // 异步更新浏览数，不阻塞返回
-      supabase
-        .from("blog_posts")
-        .update({
-          view_count: Number(post.view_count ?? 0) + 1,
-        })
-        .eq("id", numId(post.id))
-        .then(({ error: upErr }) => {
-          if (upErr) console.error("view_count update:", upErr);
-        });
-      return mapPost(post as Record<string, unknown>);
+      bumpViewCount(numId(post.id));
+      return mapPost(post);
     }
-    
-    // 草稿只有作者自己能看
+
     const { user } = await requireUser();
-    if (!user || user.id !== post.user_id) {
+    if (!user || user.id !== String(post.user_id)) {
       return null;
     }
-    
-    return mapPost(post as Record<string, unknown>);
+
+    return mapPost(post);
   } catch (error) {
     console.error("Error fetching blog post:", error);
     return null;
@@ -221,29 +189,24 @@ export async function fetchBlogPostBySlug(
 
 export async function fetchBlogPostById(id: number): Promise<BlogPost | null> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("blog_posts")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) throw error;
+    const data = await queryOne<Record<string, unknown>>(
+      `SELECT * FROM blog_posts WHERE id = $1`,
+      [id],
+    );
     if (!data) return null;
-    
-    const postStatus = data.status as string;
+
+    const postStatus = String(data.status);
 
     if (postStatus === "published" || postStatus === "archived") {
-      return mapPost(data as Record<string, unknown>);
+      return mapPost(data);
     }
-    
-    // 草稿只有作者自己能看
+
     const { user } = await requireUser();
-    if (!user || user.id !== data.user_id) {
+    if (!user || user.id !== String(data.user_id)) {
       return null;
     }
-    
-    return mapPost(data as Record<string, unknown>);
+
+    return mapPost(data);
   } catch (error) {
     console.error("Error fetching blog post:", error);
     return null;
@@ -253,132 +216,155 @@ export async function fetchBlogPostById(id: number): Promise<BlogPost | null> {
 export async function createBlogPost(
   input: CreateBlogInput,
 ): Promise<{ success: boolean; id?: number; hash?: string; error?: string }> {
-  const { supabase, user, error: authError } = await requireUser();
+  const { user, error: authError } = await requireUser();
   if (!user) {
     return { success: false, error: authError };
   }
 
   try {
-    // 检查 slug 是否已存在
-    const { data: existing } = await supabase
-      .from("blog_posts")
-      .select("id")
-      .eq("slug", input.slug)
-      .maybeSingle();
-
+    const existing = await queryOne<{ id: number }>(
+      `SELECT id FROM blog_posts WHERE slug = $1 LIMIT 1`,
+      [input.slug],
+    );
     if (existing) {
       return { success: false, error: "文章链接已存在，请修改标题" };
     }
 
-    // 生成内容 hash
     const hash = generateContentHash(input.title, input.content);
 
-    // 检查 hash 是否已存在（内容重复）
-    const { data: existingHash } = await supabase
-      .from("blog_posts")
-      .select("id")
-      .eq("hash", hash)
-      .maybeSingle();
-
+    const existingHash = await queryOne<{ id: number }>(
+      `SELECT id FROM blog_posts WHERE hash = $1 LIMIT 1`,
+      [hash],
+    );
     if (existingHash) {
       return { success: false, error: "相同内容的文章已存在" };
     }
 
-    const { data, error } = await supabase
-      .from("blog_posts")
-      .insert({
-        user_id: user.id,
-        title: input.title,
-        slug: input.slug,
+    const row = await queryOne<Record<string, unknown>>(
+      `INSERT INTO blog_posts (
+        user_id, title, slug, hash, content, excerpt, cover_image, tags, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id, hash`,
+      [
+        user.id,
+        input.title,
+        input.slug,
         hash,
-        content: input.content,
-        excerpt: input.excerpt ?? null,
-        cover_image: input.cover_image ?? null,
-        tags: input.tags ?? null,
-        status: input.status ?? "published",
-      })
-      .select("id, hash")
-      .single();
+        input.content,
+        input.excerpt ?? null,
+        input.cover_image ?? null,
+        input.tags ?? null,
+        input.status ?? "published",
+      ],
+    );
 
-    if (error) throw error;
+    if (!row) {
+      return { success: false, error: "创建失败" };
+    }
 
     revalidatePath("/blog");
     revalidatePath("/family-tree");
 
-    return { success: true, id: numId(data.id), hash: data.hash };
+    return { success: true, id: numId(row.id), hash: String(row.hash ?? "") };
   } catch (error) {
     console.error("Error creating blog post:", error);
     return { success: false, error: formatActionError(error) };
   }
 }
 
+type ExistingPostRow = {
+  user_id: string;
+  title: string;
+  content: string;
+};
+
 export async function updateBlogPost(
   id: number,
   input: Partial<CreateBlogInput>,
 ): Promise<{ success: boolean; error?: string }> {
-  const { supabase, user, error: authError } = await requireUser();
+  const { user, error: authError } = await requireUser();
   if (!user) {
     return { success: false, error: authError };
   }
 
   try {
-    // 检查是否是作者
-    const { data: existingPost } = await supabase
-      .from("blog_posts")
-      .select("user_id")
-      .eq("id", id)
-      .maybeSingle();
-    
+    const existingPost = await queryOne<ExistingPostRow>(
+      `SELECT user_id, title, content FROM blog_posts WHERE id = $1`,
+      [id],
+    );
+
     if (!existingPost) {
       return { success: false, error: "文章不存在" };
     }
-    
+
     if (existingPost.user_id !== user.id) {
       return { success: false, error: "只能编辑自己的文章" };
     }
 
-    if (input.slug !== undefined) {
-      const { data: existing } = await supabase
-        .from("blog_posts")
-        .select("id")
-        .eq("slug", input.slug)
-        .neq("id", id)
-        .maybeSingle();
+    const hasAny =
+      input.title !== undefined ||
+      input.slug !== undefined ||
+      input.content !== undefined ||
+      input.excerpt !== undefined ||
+      input.cover_image !== undefined ||
+      input.tags !== undefined ||
+      input.status !== undefined;
+    if (!hasAny) {
+      return { success: false, error: "没有要更新的字段" };
+    }
 
+    if (input.slug !== undefined) {
+      const existing = await queryOne<{ id: number }>(
+        `SELECT id FROM blog_posts WHERE slug = $1 AND id <> $2 LIMIT 1`,
+        [input.slug, id],
+      );
       if (existing) {
         return { success: false, error: "文章链接已存在" };
       }
     }
 
-    const patch: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
+    const parts: string[] = [`updated_at = NOW()`];
+    const params: unknown[] = [];
+    let i = 1;
 
-    if (input.title !== undefined) patch.title = input.title;
-    if (input.slug !== undefined) patch.slug = input.slug;
+    if (input.title !== undefined) {
+      parts.push(`title = $${i++}`);
+      params.push(input.title);
+    }
+    if (input.slug !== undefined) {
+      parts.push(`slug = $${i++}`);
+      params.push(input.slug);
+    }
     if (input.content !== undefined) {
-      patch.content = input.content;
-      // 更新内容时重新生成 hash
-      patch.hash = generateContentHash(
-        (input.title ?? existingPost.title) as string,
-        input.content
-      );
+      const titleForHash = input.title ?? existingPost.title;
+      const nextHash = generateContentHash(titleForHash, input.content);
+      parts.push(`content = $${i++}`);
+      params.push(input.content);
+      parts.push(`hash = $${i++}`);
+      params.push(nextHash);
     }
-    if (input.excerpt !== undefined) patch.excerpt = input.excerpt;
-    if (input.cover_image !== undefined) patch.cover_image = input.cover_image;
-    if (input.tags !== undefined) patch.tags = input.tags;
-    if (input.status !== undefined) patch.status = input.status;
-
-    if (Object.keys(patch).length <= 1) {
-      return { success: false, error: "没有要更新的字段" };
+    if (input.excerpt !== undefined) {
+      parts.push(`excerpt = $${i++}`);
+      params.push(input.excerpt);
+    }
+    if (input.cover_image !== undefined) {
+      parts.push(`cover_image = $${i++}`);
+      params.push(input.cover_image);
+    }
+    if (input.tags !== undefined) {
+      parts.push(`tags = $${i++}`);
+      params.push(input.tags);
+    }
+    if (input.status !== undefined) {
+      parts.push(`status = $${i++}`);
+      params.push(input.status);
     }
 
-    const { error } = await supabase
-      .from("blog_posts")
-      .update(patch)
-      .eq("id", id);
-
-    if (error) throw error;
+    params.push(id);
+    await getPool().query(
+      `UPDATE blog_posts SET ${parts.join(", ")} WHERE id = $${i}`,
+      params,
+    );
 
     revalidatePath("/blog");
     revalidatePath("/family-tree");
@@ -393,31 +379,27 @@ export async function updateBlogPost(
 export async function deleteBlogPost(
   id: number,
 ): Promise<{ success: boolean; error?: string }> {
-  const { supabase, user, role, error: authError } = await getUserRole();
+  const { user, role, error: authError } = await getUserRole();
   if (!user) {
     return { success: false, error: authError ?? "请先登录" };
   }
 
   try {
-    // 检查是否是作者
-    const { data: existingPost } = await supabase
-      .from("blog_posts")
-      .select("user_id")
-      .eq("id", id)
-      .maybeSingle();
-    
+    const existingPost = await queryOne<{ user_id: string }>(
+      `SELECT user_id FROM blog_posts WHERE id = $1`,
+      [id],
+    );
+
     if (!existingPost) {
       return { success: false, error: "文章不存在" };
     }
-    
-    // 管理员可以删除任意博客，普通用户只能删除自己的文章
+
     const isAdmin = role === "super_admin" || role === "admin";
     if (!isAdmin && existingPost.user_id !== user.id) {
       return { success: false, error: "只能删除自己的文章" };
     }
 
-    const { error } = await supabase.from("blog_posts").delete().eq("id", id);
-    if (error) throw error;
+    await getPool().query(`DELETE FROM blog_posts WHERE id = $1`, [id]);
 
     revalidatePath("/blog");
     revalidatePath("/family-tree");
@@ -429,32 +411,28 @@ export async function deleteBlogPost(
   }
 }
 
-export async function searchBlogPosts(query: string): Promise<BlogPost[]> {
+export async function searchBlogPosts(queryStr: string): Promise<BlogPost[]> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("blog_posts")
-      .select("*")
-      .in("status", [...PUBLIC_BLOG_STATUSES])
-      .order("created_at", { ascending: false });
+    const rows = await query<Record<string, unknown>>(
+      `SELECT * FROM blog_posts
+       WHERE status = ANY($1::text[])
+       ORDER BY created_at DESC`,
+      [PUBLIC_BLOG_STATUSES],
+    );
 
-    if (error) throw error;
-
-    const q = query.trim().toLowerCase();
+    const q = queryStr.trim().toLowerCase();
     if (!q) {
-      return (data ?? []).map((row) => mapPost(row as Record<string, unknown>));
+      return rows.map((row) => mapPost(row));
     }
 
-    return (data ?? [])
+    return rows
       .filter((row) => {
         const title = String(row.title ?? "").toLowerCase();
         const content = String(row.content ?? "").toLowerCase();
         const tags = String(row.tags ?? "").toLowerCase();
-        return (
-          title.includes(q) || content.includes(q) || tags.includes(q)
-        );
+        return title.includes(q) || content.includes(q) || tags.includes(q);
       })
-      .map((row) => mapPost(row as Record<string, unknown>));
+      .map((row) => mapPost(row));
   } catch (error) {
     console.error("Error searching blog posts:", error);
     return [];
@@ -463,17 +441,14 @@ export async function searchBlogPosts(query: string): Promise<BlogPost[]> {
 
 export async function fetchBlogTags(): Promise<string[]> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("blog_posts")
-      .select("tags")
-      .in("status", [...PUBLIC_BLOG_STATUSES])
-      .not("tags", "is", null);
-
-    if (error) throw error;
+    const rows = await query<{ tags: string | null }>(
+      `SELECT tags FROM blog_posts
+       WHERE status = ANY($1::text[]) AND tags IS NOT NULL`,
+      [PUBLIC_BLOG_STATUSES],
+    );
 
     const tagSet = new Set<string>();
-    (data ?? []).forEach((post) => {
+    rows.forEach((post) => {
       if (post.tags) {
         String(post.tags)
           .split(",")

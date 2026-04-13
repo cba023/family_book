@@ -1,7 +1,7 @@
 "use server";
 
 import { requireUser, numId } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { query } from "@/lib/pg";
 import { formatActionError } from "@/lib/format-action-error";
 
 export interface StatisticsData {
@@ -20,15 +20,21 @@ export async function fetchFamilyStatistics(): Promise<{
   requireAuth: boolean;
 }> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("family_members")
-      .select("id, name, gender, generation, is_alive, birthday, is_married_in")
-      .order("generation", { ascending: true, nullsFirst: true });
+    const data = await query<{
+      id: number;
+      name: string;
+      gender: string | null;
+      generation: number | null;
+      is_alive: boolean;
+      birthday: string | null;
+      is_married_in: boolean;
+    }>(
+      `SELECT id, name, gender, generation, is_alive, birthday, is_married_in
+       FROM family_members
+       ORDER BY generation ASC NULLS FIRST`,
+    );
 
-    if (error) throw error;
-
-    const members = (data ?? []).map((m) => ({
+    const members = data.map((m) => ({
       id: numId(m.id),
       name: String(m.name),
       gender: m.gender != null ? String(m.gender) : null,
@@ -164,7 +170,6 @@ export async function fetchFamilyStatistics(): Promise<{
       { name: "嫁入", value: marriedInCounts["嫁入"] || 0, fill: "#f97316" },
     ];
 
-    // 检查用户是否登录
     const { user } = await requireUser();
 
     return {

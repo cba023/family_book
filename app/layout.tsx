@@ -13,7 +13,7 @@ const defaultUrl = process.env.VERCEL_URL
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: `${FAMILY_SURNAME}氏族谱管理系统`,
-  description: "基于 Next.js 和 Supabase 构建的家族族谱管理系统",
+  description: "基于 Next.js 与 PostgreSQL 的家族族谱管理系统",
 };
 
 const geistSans = Geist({

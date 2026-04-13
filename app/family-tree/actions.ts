@@ -1,8 +1,8 @@
 "use server";
 
-import { requireUser, requireAdmin, getUserRole, numId } from "@/lib/auth/session";
+import { requireUser, requireAdmin, numId } from "@/lib/auth/session";
 import { formatActionError } from "@/lib/format-action-error";
-import { createClient } from "@/lib/supabase/server";
+import { query, queryOne, getPool } from "@/lib/pg";
 import { revalidatePath } from "next/cache";
 
 export interface FamilyMember {
@@ -47,7 +47,8 @@ function mapMemberRow(
     father_id: fid,
     father_name: fid ? fatherMap[fid] ?? null : null,
     gender: (item.gender as FamilyMember["gender"]) ?? null,
-    official_position: item.official_position != null ? String(item.official_position) : null,
+    official_position:
+      item.official_position != null ? String(item.official_position) : null,
     is_alive: Boolean(item.is_alive),
     spouse_id: sid,
     spouse_name: sid ? spouseMap[sid] ?? null : null,
@@ -55,7 +56,8 @@ function mapMemberRow(
     remarks: item.remarks != null ? String(item.remarks) : null,
     birthday: item.birthday != null ? String(item.birthday) : null,
     death_date: item.death_date != null ? String(item.death_date) : null,
-    residence_place: item.residence_place != null ? String(item.residence_place) : null,
+    residence_place:
+      item.residence_place != null ? String(item.residence_place) : null,
     updated_at:
       item.updated_at != null ? String(item.updated_at) : new Date().toISOString(),
   };
@@ -66,32 +68,29 @@ export async function fetchFamilyMembers(
   pageSize: number = 50,
   searchQuery: string = "",
 ): Promise<FetchMembersResult> {
-  // 查询数据只需要登录，不需要管理员权限
-  const { supabase, user, error: authError } = await requireUser();
+  const { user, error: authError } = await requireUser();
   if (!user) {
     return { data: [], count: 0, error: authError };
   }
 
   try {
     const offset = (page - 1) * pageSize;
-
-    let q = supabase
-      .from("family_members")
-      .select("*", { count: "exact" });
-
     const term = searchQuery.trim();
-    if (term) {
-      q = q.ilike("name", `%${term}%`);
-    }
 
-    const { data, error, count } = await q
-      .order("generation", { ascending: true, nullsFirst: true })
-      .order("sibling_order", { ascending: true, nullsFirst: true })
-      .range(offset, offset + pageSize - 1);
+    type Row = Record<string, unknown> & { __full_count?: string };
+    const rows = await query<Row>(
+      `SELECT fm.*, COUNT(*) OVER()::text AS __full_count
+       FROM family_members fm
+       WHERE ($1::text = '' OR fm.name ILIKE '%' || $1 || '%')
+       ORDER BY fm.generation ASC NULLS FIRST,
+                fm.sibling_order ASC NULLS FIRST
+       LIMIT $2 OFFSET $3`,
+      [term, pageSize, offset],
+    );
 
-    if (error) throw error;
+    const count =
+      rows.length > 0 ? parseInt(String(rows[0].__full_count ?? "0"), 10) : 0;
 
-    const rows = (data ?? []) as Record<string, unknown>[];
     const fatherIds = rows
       .map((item) => item.father_id)
       .filter((id): id is number | string => id != null)
@@ -103,35 +102,34 @@ export async function fetchFamilyMembers(
 
     let fatherMap: Record<number, string> = {};
     if (fatherIds.length > 0) {
-      const { data: fathers, error: fe } = await supabase
-        .from("family_members")
-        .select("id,name")
-        .in("id", fatherIds);
-      if (fe) throw fe;
+      const fathers = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [fatherIds],
+      );
       fatherMap = Object.fromEntries(
-        (fathers ?? []).map((f) => [numId(f.id), String(f.name)]),
+        fathers.map((f) => [numId(f.id), String(f.name)]),
       );
     }
 
     let spouseMap: Record<number, string> = {};
     if (spouseIds.length > 0) {
-      const { data: spouses, error: se } = await supabase
-        .from("family_members")
-        .select("id,name")
-        .in("id", spouseIds);
-      if (se) throw se;
+      const spouses = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [spouseIds],
+      );
       spouseMap = Object.fromEntries(
-        (spouses ?? []).map((s) => [numId(s.id), String(s.name)]),
+        spouses.map((s) => [numId(s.id), String(s.name)]),
       );
     }
 
-    const transformedData = rows.map((item) =>
-      mapMemberRow(item, fatherMap, spouseMap),
-    );
+    const transformedData = rows.map((item) => {
+      const { __full_count: _, ...rest } = item;
+      return mapMemberRow(rest, fatherMap, spouseMap);
+    });
 
     return {
       data: transformedData,
-      count: count ?? 0,
+      count,
       error: null,
     };
   } catch (error) {
@@ -163,46 +161,49 @@ export interface CreateMemberInput {
 export async function createFamilyMember(
   input: CreateMemberInput,
 ): Promise<{ success: boolean; error: string | null }> {
-  const { supabase, user, error: authError } = await requireAdmin();
+  const { user, error: authError } = await requireAdmin();
   if (!user) {
     return { success: false, error: authError };
   }
 
   try {
     const alive = input.is_alive ?? true;
-    const { data: inserted, error: insErr } = await supabase
-      .from("family_members")
-      .insert({
-        user_id: user.id,
-        name: input.name,
-        generation: input.generation ?? null,
-        sibling_order: input.sibling_order ?? null,
-        father_id: input.father_id ?? null,
-        gender: input.gender ?? null,
-        official_position: input.official_position ?? null,
-        is_alive: alive,
-        spouse_id: input.spouse_id ?? null,
-        is_married_in: Boolean(input.is_married_in),
-        remarks: input.remarks ?? null,
-        birthday: input.birthday ?? null,
-        death_date: input.death_date ?? null,
-        residence_place: input.residence_place ?? null,
-      })
-      .select("id")
-      .single();
+    const row = await queryOne<{ id: number }>(
+      `INSERT INTO family_members (
+        user_id, name, generation, sibling_order, father_id, gender,
+        official_position, is_alive, spouse_id, is_married_in, remarks,
+        birthday, death_date, residence_place, updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW()
+      ) RETURNING id`,
+      [
+        user.id,
+        input.name,
+        input.generation ?? null,
+        input.sibling_order ?? null,
+        input.father_id ?? null,
+        input.gender ?? null,
+        input.official_position ?? null,
+        alive,
+        input.spouse_id ?? null,
+        Boolean(input.is_married_in),
+        input.remarks ?? null,
+        input.birthday ?? null,
+        input.death_date ?? null,
+        input.residence_place ?? null,
+      ],
+    );
 
-    if (insErr) throw insErr;
-    const newMemberId = numId(inserted.id);
+    if (!row) {
+      return { success: false, error: "插入失败" };
+    }
+    const newMemberId = numId(row.id);
 
     if (input.spouse_id) {
-      const { error: upErr } = await supabase
-        .from("family_members")
-        .update({
-          spouse_id: newMemberId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", input.spouse_id);
-      if (upErr) throw upErr;
+      await getPool().query(
+        `UPDATE family_members SET spouse_id = $1, updated_at = NOW() WHERE id = $2`,
+        [newMemberId, input.spouse_id],
+      );
     }
 
     revalidatePath("/family-tree", "layout");
@@ -219,7 +220,7 @@ export async function createFamilyMember(
 export async function deleteFamilyMembers(
   ids: number[],
 ): Promise<{ success: boolean; error: string | null }> {
-  const { supabase, user, error: authError } = await requireAdmin();
+  const { user, error: authError } = await requireAdmin();
   if (!user) {
     return { success: false, error: authError };
   }
@@ -229,8 +230,9 @@ export async function deleteFamilyMembers(
   }
 
   try {
-    const { error } = await supabase.from("family_members").delete().in("id", ids);
-    if (error) throw error;
+    await getPool().query(`DELETE FROM family_members WHERE id = ANY($1::bigint[])`, [
+      ids,
+    ]);
 
     revalidatePath("/family-tree", "layout");
     return { success: true, error: null };
@@ -254,22 +256,28 @@ export async function fetchAllMembersForSelect(): Promise<
     spouse_id: number | null;
   }[]
 > {
-  const { supabase, user, error: authError } = await requireAdmin();
+  const { user, error: authError } = await requireAdmin();
   if (!user) {
     console.error("fetchAllMembersForSelect:", authError);
     return [];
   }
 
   try {
-    const { data, error } = await supabase
-      .from("family_members")
-      .select("id, name, generation, gender, is_married_in, father_id, spouse_id")
-      .order("generation", { ascending: true, nullsFirst: true })
-      .order("name", { ascending: true });
+    const data = await query<{
+      id: number;
+      name: string;
+      generation: number | null;
+      gender: string | null;
+      is_married_in: boolean;
+      father_id: number | null;
+      spouse_id: number | null;
+    }>(
+      `SELECT id, name, generation, gender, is_married_in, father_id, spouse_id
+       FROM family_members
+       ORDER BY generation ASC NULLS FIRST, name ASC`,
+    );
 
-    if (error) throw error;
-
-    return (data ?? []).map((m) => ({
+    return data.map((m) => ({
       id: numId(m.id),
       name: String(m.name),
       generation: m.generation != null ? Number(m.generation) : null,
@@ -293,16 +301,11 @@ export async function fetchMembersForTimeline(): Promise<{
   requireAuth: boolean;
 }> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("family_members")
-      .select("*")
-      .order("generation", { ascending: true, nullsFirst: true })
-      .order("sibling_order", { ascending: true, nullsFirst: true });
+    const rows = await query<Record<string, unknown>>(
+      `SELECT * FROM family_members
+       ORDER BY generation ASC NULLS FIRST, sibling_order ASC NULLS FIRST`,
+    );
 
-    if (error) throw error;
-
-    const rows = (data ?? []) as Record<string, unknown>[];
     const fatherIds = rows
       .map((r) => r.father_id)
       .filter((id): id is number | string => id != null)
@@ -310,12 +313,12 @@ export async function fetchMembersForTimeline(): Promise<{
 
     let fatherMap: Record<number, string> = {};
     if (fatherIds.length > 0) {
-      const { data: fathers } = await supabase
-        .from("family_members")
-        .select("id,name")
-        .in("id", fatherIds);
+      const fathers = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [fatherIds],
+      );
       fatherMap = Object.fromEntries(
-        (fathers ?? []).map((f) => [numId(f.id), String(f.name)]),
+        fathers.map((f) => [numId(f.id), String(f.name)]),
       );
     }
 
@@ -348,7 +351,6 @@ export async function fetchMembersForTimeline(): Promise<{
       };
     });
 
-    // 检查用户是否登录
     const { user } = await requireUser();
 
     return { data: members, requireAuth: !user };
@@ -359,29 +361,25 @@ export async function fetchMembersForTimeline(): Promise<{
 }
 
 export async function fetchMemberById(id: number): Promise<FamilyMember | null> {
-  const { supabase, user, error: authError } = await requireUser();
+  const { user, error: authError } = await requireUser();
   if (!user) {
     console.error("fetchMemberById:", authError);
     return null;
   }
 
   try {
-    const { data: item, error } = await supabase
-      .from("family_members")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) throw error;
+    const item = await queryOne<Record<string, unknown>>(
+      `SELECT * FROM family_members WHERE id = $1`,
+      [id],
+    );
     if (!item) return null;
 
     let father_name: string | null = null;
     if (item.father_id != null) {
-      const { data: father } = await supabase
-        .from("family_members")
-        .select("name")
-        .eq("id", numId(item.father_id))
-        .maybeSingle();
+      const father = await queryOne<{ name: string }>(
+        `SELECT name FROM family_members WHERE id = $1`,
+        [numId(item.father_id)],
+      );
       father_name = father?.name != null ? String(father.name) : null;
     }
 
@@ -420,70 +418,64 @@ export async function fetchMemberById(id: number): Promise<FamilyMember | null> 
 export async function updateFamilyMember(
   input: UpdateMemberInput,
 ): Promise<{ success: boolean; error: string | null }> {
-  const { supabase, user, error: authError } = await requireAdmin();
+  const { user, error: authError } = await requireAdmin();
   if (!user) {
     return { success: false, error: authError };
   }
 
   try {
-    const { data: currentMember, error: curErr } = await supabase
-      .from("family_members")
-      .select("spouse_id")
-      .eq("id", input.id)
-      .single();
-
-    if (curErr) throw curErr;
+    const currentMember = await queryOne<{ spouse_id: number | null }>(
+      `SELECT spouse_id FROM family_members WHERE id = $1`,
+      [input.id],
+    );
+    if (!currentMember) {
+      return { success: false, error: "成员不存在" };
+    }
 
     const oldSpouseId =
-      currentMember?.spouse_id != null
+      currentMember.spouse_id != null
         ? numId(currentMember.spouse_id)
         : null;
     const newSpouseId = input.spouse_id ?? null;
-
     const alive = input.is_alive ?? true;
 
-    const { error: upErr } = await supabase
-      .from("family_members")
-      .update({
-        name: input.name,
-        generation: input.generation ?? null,
-        sibling_order: input.sibling_order ?? null,
-        father_id: input.father_id ?? null,
-        gender: input.gender ?? null,
-        official_position: input.official_position ?? null,
-        is_alive: alive,
-        spouse_id: newSpouseId,
-        is_married_in: Boolean(input.is_married_in),
-        remarks: input.remarks ?? null,
-        birthday: input.birthday ?? null,
-        death_date: input.death_date ?? null,
-        residence_place: input.residence_place ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", input.id);
-
-    if (upErr) throw upErr;
+    await getPool().query(
+      `UPDATE family_members SET
+        name = $1, generation = $2, sibling_order = $3, father_id = $4,
+        gender = $5, official_position = $6, is_alive = $7, spouse_id = $8,
+        is_married_in = $9, remarks = $10, birthday = $11, death_date = $12,
+        residence_place = $13, updated_at = NOW()
+      WHERE id = $14`,
+      [
+        input.name,
+        input.generation ?? null,
+        input.sibling_order ?? null,
+        input.father_id ?? null,
+        input.gender ?? null,
+        input.official_position ?? null,
+        alive,
+        newSpouseId,
+        Boolean(input.is_married_in),
+        input.remarks ?? null,
+        input.birthday ?? null,
+        input.death_date ?? null,
+        input.residence_place ?? null,
+        input.id,
+      ],
+    );
 
     if (newSpouseId && newSpouseId !== oldSpouseId) {
-      const { error: e2 } = await supabase
-        .from("family_members")
-        .update({
-          spouse_id: input.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", newSpouseId);
-      if (e2) throw e2;
+      await getPool().query(
+        `UPDATE family_members SET spouse_id = $1, updated_at = NOW() WHERE id = $2`,
+        [input.id, newSpouseId],
+      );
     }
 
     if (oldSpouseId && oldSpouseId !== newSpouseId) {
-      const { error: e3 } = await supabase
-        .from("family_members")
-        .update({
-          spouse_id: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", oldSpouseId);
-      if (e3) throw e3;
+      await getPool().query(
+        `UPDATE family_members SET spouse_id = NULL, updated_at = NOW() WHERE id = $1`,
+        [oldSpouseId],
+      );
     }
 
     revalidatePath("/family-tree", "layout");
@@ -514,7 +506,7 @@ export interface ImportMemberInput {
 export async function batchCreateFamilyMembers(
   members: ImportMemberInput[],
 ): Promise<{ success: boolean; count: number; error: string | null }> {
-  const { supabase, user, error: authError } = await requireAdmin();
+  const { user, error: authError } = await requireAdmin();
   if (!user) {
     return { success: false, count: 0, error: authError };
   }
@@ -530,12 +522,11 @@ export async function batchCreateFamilyMembers(
 
     const fatherMap: Record<string, number> = {};
     if (fatherNames.length > 0) {
-      const { data: foundFathers, error: fe } = await supabase
-        .from("family_members")
-        .select("id,name")
-        .in("name", fatherNames);
-      if (fe) throw fe;
-      for (const f of foundFathers ?? []) {
+      const foundFathers = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE name = ANY($1::text[])`,
+        [fatherNames],
+      );
+      for (const f of foundFathers) {
         fatherMap[String(f.name)] = numId(f.id);
       }
     }
@@ -551,28 +542,30 @@ export async function batchCreateFamilyMembers(
 
       const alive = m.is_alive ?? true;
 
-      const { data: inserted, error: insErr } = await supabase
-        .from("family_members")
-        .insert({
-          user_id: user.id,
-          name: m.name,
-          generation: m.generation ?? null,
-          sibling_order: m.sibling_order ?? null,
+      const inserted = await queryOne<{ id: number }>(
+        `INSERT INTO family_members (
+          user_id, name, generation, sibling_order, father_id, gender,
+          official_position, is_alive, spouse_id, is_married_in, remarks,
+          birthday, death_date, residence_place, updated_at
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, NULL, false, $9, $10, NULL, $11, NOW()
+        ) RETURNING id`,
+        [
+          user.id,
+          m.name,
+          m.generation ?? null,
+          m.sibling_order ?? null,
           father_id,
-          gender: m.gender ?? null,
-          official_position: m.official_position ?? null,
-          is_alive: alive,
-          spouse_id: null,
-          is_married_in: false,
-          remarks: m.remarks ?? null,
-          birthday: m.birthday ?? null,
-          death_date: null,
-          residence_place: m.residence_place ?? null,
-        })
-        .select("id")
-        .single();
+          m.gender ?? null,
+          m.official_position ?? null,
+          alive,
+          m.remarks ?? null,
+          m.birthday ?? null,
+          m.residence_place ?? null,
+        ],
+      );
 
-      if (insErr) throw insErr;
+      if (!inserted) throw new Error("批量插入失败");
       const newId = numId(inserted.id);
       nameToLastId[m.name.trim()] = newId;
     }
@@ -586,33 +579,22 @@ export async function batchCreateFamilyMembers(
 
       let spouseId: number | undefined = nameToLastId[spouseName];
       if (!spouseId) {
-        const { data: row } = await supabase
-          .from("family_members")
-          .select("id")
-          .eq("name", spouseName)
-          .limit(1)
-          .maybeSingle();
+        const row = await queryOne<{ id: number }>(
+          `SELECT id FROM family_members WHERE name = $1 LIMIT 1`,
+          [spouseName],
+        );
         spouseId = row ? numId(row.id) : undefined;
       }
       if (spouseId === undefined) continue;
 
-      const { error: e1 } = await supabase
-        .from("family_members")
-        .update({
-          spouse_id: spouseId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", selfId);
-      if (e1) throw e1;
-
-      const { error: e2 } = await supabase
-        .from("family_members")
-        .update({
-          spouse_id: selfId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", spouseId);
-      if (e2) throw e2;
+      await getPool().query(
+        `UPDATE family_members SET spouse_id = $1, updated_at = NOW() WHERE id = $2`,
+        [spouseId, selfId],
+      );
+      await getPool().query(
+        `UPDATE family_members SET spouse_id = $1, updated_at = NOW() WHERE id = $2`,
+        [selfId, spouseId],
+      );
     }
 
     revalidatePath("/family-tree", "layout");
@@ -631,21 +613,17 @@ export async function exportFamilyMembersToJson(): Promise<{
   data: Record<string, unknown>[];
   error: string | null;
 }> {
-  const { supabase, user, error: authError } = await requireAdmin();
+  const { user, error: authError } = await requireAdmin();
   if (!user) {
     return { data: [], error: authError };
   }
 
   try {
-    const { data, error } = await supabase
-      .from("family_members")
-      .select("*")
-      .order("generation", { ascending: true, nullsFirst: true })
-      .order("sibling_order", { ascending: true, nullsFirst: true });
-
-    if (error) throw error;
-
-    return { data: (data ?? []) as Record<string, unknown>[], error: null };
+    const data = await query<Record<string, unknown>>(
+      `SELECT * FROM family_members
+       ORDER BY generation ASC NULLS FIRST, sibling_order ASC NULLS FIRST`,
+    );
+    return { data, error: null };
   } catch (error) {
     console.error("Error exporting family members:", error);
     return {

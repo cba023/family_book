@@ -22,8 +22,7 @@ export default function Page() {
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <p className="text-sm text-muted-foreground">
-                注册流程不要求邮箱。若 Supabase 仍启用「需邮箱确认」且未配置发信，可能无法完成验证，请在控制台关闭该选项或配置
-                SMTP。
+                注册流程不要求真实邮箱。首个注册的账户将自动成为超级管理员。
               </p>
               <Button asChild className="w-full">
                 <Link href="/auth/login">前往登录</Link>

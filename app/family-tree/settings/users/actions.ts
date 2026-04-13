@@ -1,16 +1,16 @@
 "use server";
 
 import { requireSuperAdmin } from "@/lib/auth/session";
-import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { parseAppRole, type AppRole } from "@/lib/auth/roles";
 import {
-  syntheticEmailFromUsername,
   validateOptionalFullName,
   validateOptionalPhone,
   validateUsernameForRegister,
 } from "@/lib/auth/account-username";
 import { formatActionError } from "@/lib/format-action-error";
 import { revalidatePath } from "next/cache";
+import { hashPassword } from "@/lib/auth/password";
+import { withTransaction, query, queryOne, getPool } from "@/lib/pg";
 
 export type ManagedUserRow = {
   id: string;
@@ -30,17 +30,22 @@ export async function getManagedUsers(): Promise<{
       return { users: [], error: gate.error };
     }
 
-    const { data: profiles, error: pErr } = await gate.supabase
-      .from("profiles")
-      .select("id, role, username, full_name, phone")
-      .order("username", { ascending: true });
-    if (pErr) throw pErr;
+    const profiles = await query<{
+      id: string;
+      role: string;
+      username: string;
+      full_name: string | null;
+      phone: string | null;
+    }>(
+      `SELECT id, role, username, full_name, phone FROM profiles
+       ORDER BY username ASC`,
+    );
 
-    const users: ManagedUserRow[] = (profiles ?? []).map((p) => ({
-      id: p.id as string,
-      username: (p.username as string) ?? "",
-      fullName: (p.full_name as string | null) ?? null,
-      phone: (p.phone as string | null) ?? null,
+    const users: ManagedUserRow[] = profiles.map((p) => ({
+      id: p.id,
+      username: p.username ?? "",
+      fullName: p.full_name ?? null,
+      phone: p.phone ?? null,
       role: parseAppRole(p.role),
     }));
 
@@ -65,13 +70,14 @@ export async function setManagedUserRole(
       return { success: false, error: "不能修改自己的角色" };
     }
 
-    const { data: targetProfile } = await gate.supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", targetUserId)
-      .maybeSingle();
-
-    if (targetProfile?.role === "super_admin") {
+    const tr = await queryOne<{ role: string }>(
+      `SELECT role FROM profiles WHERE id = $1`,
+      [targetUserId],
+    );
+    if (!tr) {
+      return { success: false, error: "用户不存在" };
+    }
+    if (tr.role === "super_admin") {
       return { success: false, error: "不能修改超级管理员账号" };
     }
 
@@ -79,12 +85,10 @@ export async function setManagedUserRole(
       return { success: false, error: "无效角色" };
     }
 
-    const { error } = await gate.supabase
-      .from("profiles")
-      .update({ role: nextRole })
-      .eq("id", targetUserId);
-
-    if (error) throw error;
+    await getPool().query(`UPDATE profiles SET role = $1 WHERE id = $2`, [
+      nextRole,
+      targetUserId,
+    ]);
 
     revalidatePath("/family-tree/settings/users");
     revalidatePath("/family-tree", "layout");
@@ -104,7 +108,6 @@ export type CreateManagedUserInput = {
   phone?: string;
 };
 
-/** 超级管理员直接创建登录账号（GoTrue 使用合成邮箱 + user_metadata.username） */
 export async function createManagedUser(
   input: CreateManagedUserInput,
 ): Promise<{ success: boolean; error: string | null }> {
@@ -137,41 +140,70 @@ export async function createManagedUser(
       return { success: false, error: "无效角色" };
     }
 
-    const email = syntheticEmailFromUsername(uCheck.username);
-    const user_metadata: Record<string, string> = {
-      username: uCheck.username,
-    };
-    if (fnCheck.value) user_metadata.full_name = fnCheck.value;
-    if (phCheck.value) user_metadata.phone = phCheck.value;
+    await withTransaction(async (client) => {
+      const hash = await hashPassword(password);
+      const { rows: uRows } = await client.query<{ id: string }>(
+        `INSERT INTO app_users (password_hash) VALUES ($1) RETURNING id`,
+        [hash],
+      );
+      const newId = uRows[0]?.id;
+      if (!newId) throw new Error("创建用户失败");
 
-    const svc = createServiceRoleClient();
-    const { data, error } = await svc.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata,
+      await client.query(
+        `INSERT INTO profiles (id, role, username, full_name, phone)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          newId,
+          initialRole,
+          uCheck.username,
+          fnCheck.value,
+          phCheck.value,
+        ],
+      );
     });
-
-    if (error) throw error;
-    const newId = data.user?.id;
-    if (!newId) {
-      return { success: false, error: "创建失败：未返回用户 ID" };
-    }
-
-    if (initialRole === "admin") {
-      const { error: uErr } = await gate.supabase
-        .from("profiles")
-        .update({ role: "admin" })
-        .eq("id", newId);
-      if (uErr) throw uErr;
-    }
 
     revalidatePath("/family-tree/settings/users");
     revalidatePath("/family-tree", "layout");
     revalidatePath("/blog", "layout");
     return { success: true, error: null };
-  } catch (e) {
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (
+      typeof msg === "string" &&
+      msg.includes("profiles_username_lower_key")
+    ) {
+      return { success: false, error: "该账户名已被使用" };
+    }
     console.error("createManagedUser", e);
+    return { success: false, error: formatActionError(e) };
+  }
+}
+
+/** 超级管理员重置指定用户密码 */
+export async function resetManagedUserPassword(
+  targetUserId: string,
+  newPassword: string,
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const gate = await requireSuperAdmin();
+    if (!gate.user) {
+      return { success: false, error: gate.error };
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: "密码至少 6 位" };
+    }
+    const hash = await hashPassword(newPassword);
+    const r = await getPool().query(
+      `UPDATE app_users SET password_hash = $1 WHERE id = $2`,
+      [hash, targetUserId],
+    );
+    if (r.rowCount === 0) {
+      return { success: false, error: "用户不存在" };
+    }
+    revalidatePath("/family-tree/settings/users");
+    return { success: true, error: null };
+  } catch (e) {
+    console.error("resetManagedUserPassword", e);
     return { success: false, error: formatActionError(e) };
   }
 }

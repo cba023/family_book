@@ -1,4 +1,4 @@
-/** Supabase Auth 仍使用「邮箱+密码」，此处用固定后缀合成唯一邮箱，界面只展示账户名。 */
+/** 界面仅展示账户名；部分展示场景用固定后缀合成占位「邮箱」便于沿用既有 UI 逻辑。 */
 export const SYNTHETIC_EMAIL_DOMAIN = "account.familybook.local";
 
 const RESERVED = new Set([

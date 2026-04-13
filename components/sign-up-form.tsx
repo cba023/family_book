@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { signUp } from "@/app/auth/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,7 +16,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  syntheticEmailFromUsername,
   validateOptionalFullName,
   validateOptionalPhone,
   validateUsernameForRegister,
@@ -37,7 +36,6 @@ export function SignUpForm({
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
     setIsLoading(true);
     setError(null);
 
@@ -66,32 +64,17 @@ export function SignUpForm({
       return;
     }
 
-    const data = {
-      username: uCheck.username,
-      full_name: fnCheck.value ?? "",
-      phone: phCheck.value ?? "",
-    };
-
     try {
-      // 注册
-      const { error: signUpError } = await supabase.auth.signUp({
-        email: syntheticEmailFromUsername(uCheck.username),
+      const res = await signUp(
+        uCheck.username,
         password,
-        options: {
-          data,
-          emailRedirectTo: `${window.location.origin}/`,
-        },
-      });
-      if (signUpError) throw signUpError;
-
-      // 自动登录
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: syntheticEmailFromUsername(uCheck.username),
-        password,
-      });
-      if (signInError) throw signInError;
-
-      // 登录成功，刷新主页
+        fnCheck.value ?? "",
+        phCheck.value ?? "",
+      );
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
       router.push("/");
       router.refresh();
     } catch (error: unknown) {

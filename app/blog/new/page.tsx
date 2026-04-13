@@ -27,7 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { LoginDialog } from "@/components/login-dialog";
-import { createClient } from "@/lib/supabase/client";
+import { checkClientAuth } from "@/app/auth/actions";
 
 export default function NewBlogPostPage() {
   const router = useRouter();
@@ -46,9 +46,8 @@ export default function NewBlogPostPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { loggedIn } = await checkClientAuth();
+      if (!loggedIn) {
         setIsLoggedIn(false);
         setLoginOpen(true);
       } else {

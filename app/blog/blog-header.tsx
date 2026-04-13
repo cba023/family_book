@@ -6,9 +6,10 @@ import { GenealogyHeaderNavLinks } from "@/components/genealogy-header-nav-links
 import { FAMILY_SURNAME } from "@/lib/utils";
 import { getUserRole } from "@/lib/auth/session";
 import { canMaintainGenealogy } from "@/lib/auth/roles";
+import { syntheticEmailFromUsername } from "@/lib/auth/account-username";
 
 export async function BlogHeader() {
-  const { user, role } = await getUserRole();
+  const { user, role, username } = await getUserRole();
   const canMaintain = Boolean(user && canMaintainGenealogy(role));
   const isSuperAdmin = Boolean(user && role === "super_admin");
 
@@ -30,14 +31,32 @@ export async function BlogHeader() {
           <ThemeSwitcher />
           <div className="hidden md:block">
             <AuthButton
-              user={user ? { id: user.id, email: user.email } : null}
-              profile={user ? { role, username: null } : null}
+              user={
+                user
+                  ? {
+                      id: user.id,
+                      email: username
+                        ? syntheticEmailFromUsername(username)
+                        : null,
+                    }
+                  : null
+              }
+              profile={user ? { role, username } : null}
             />
           </div>
           <MobileNav isAdmin={canMaintain} isSuperAdmin={isSuperAdmin} isLoggedIn={Boolean(user)}>
             <AuthButton
-              user={user ? { id: user.id, email: user.email } : null}
-              profile={user ? { role, username: null } : null}
+              user={
+                user
+                  ? {
+                      id: user.id,
+                      email: username
+                        ? syntheticEmailFromUsername(username)
+                        : null,
+                    }
+                  : null
+              }
+              profile={user ? { role, username } : null}
             />
           </MobileNav>
         </div>

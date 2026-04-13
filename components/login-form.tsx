@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { signIn } from "@/app/auth/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -16,10 +16,7 @@ import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import {
-  syntheticEmailFromUsername,
-  validateUsernameForRegister,
-} from "@/lib/auth/account-username";
+import { validateUsernameForRegister } from "@/lib/auth/account-username";
 
 export function LoginForm({
   className,
@@ -35,7 +32,6 @@ export function LoginForm({
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
     setIsLoading(true);
     setError(null);
 
@@ -47,12 +43,12 @@ export function LoginForm({
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: syntheticEmailFromUsername(uCheck.username),
-        password,
-      });
-      if (error) throw error;
-      // 登录成功后重定向到博客页
+      const res = await signIn(uCheck.username, password);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+      router.refresh();
       router.push("/blog");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");

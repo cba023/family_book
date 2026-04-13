@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { signIn, signUp } from "@/app/auth/actions";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import {
-  syntheticEmailFromUsername,
   validateUsernameForRegister,
   validateOptionalFullName,
   validateOptionalPhone,
@@ -94,7 +93,6 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
     setIsLoading(true);
     setError(null);
 
@@ -106,12 +104,11 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: syntheticEmailFromUsername(uCheck.username),
-        password: loginPassword,
-      });
-      if (error) throw error;
-
+      const res = await signIn(uCheck.username, loginPassword);
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
       onOpenChange(false);
       onSuccess?.();
     } catch (error: unknown) {
@@ -123,7 +120,6 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
     setIsLoading(true);
     setError(null);
 
@@ -152,31 +148,17 @@ export function LoginDialog({ open, onOpenChange, onSuccess }: LoginDialogProps)
       return;
     }
 
-    const data = {
-      username: uCheck.username,
-      full_name: fnCheck.value ?? "",
-      phone: phCheck.value ?? "",
-    };
-
     try {
-      // 注册
-      const { error: signUpError } = await supabase.auth.signUp({
-        email: syntheticEmailFromUsername(uCheck.username),
-        password: registerPassword,
-        options: {
-          data,
-          emailRedirectTo: `${window.location.origin}/`,
-        },
-      });
-      if (signUpError) throw signUpError;
-
-      // 自动登录
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: syntheticEmailFromUsername(uCheck.username),
-        password: registerPassword,
-      });
-      if (signInError) throw signInError;
-
+      const res = await signUp(
+        uCheck.username,
+        registerPassword,
+        fnCheck.value ?? "",
+        phCheck.value ?? "",
+      );
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
       onOpenChange(false);
       onSuccess?.();
     } catch (error: unknown) {

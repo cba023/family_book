@@ -1,7 +1,7 @@
 "use server";
 
 import { requireUser, numId } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { query } from "@/lib/pg";
 import { formatActionError } from "@/lib/format-action-error";
 
 export interface BiographyMember {
@@ -26,18 +26,11 @@ export async function fetchMembersWithBiography(): Promise<{
   requireAuth: boolean;
 }> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("family_members")
-      .select("*")
-      .not("remarks", "is", null)
-      .neq("remarks", "")
-      .order("generation", { ascending: true, nullsFirst: true })
-      .order("sibling_order", { ascending: true, nullsFirst: true });
-
-    if (error) throw error;
-
-    const raw = (data ?? []) as Record<string, unknown>[];
+    const raw = await query<Record<string, unknown>>(
+      `SELECT * FROM family_members
+       WHERE remarks IS NOT NULL AND trim(remarks) <> ''
+       ORDER BY generation ASC NULLS FIRST, sibling_order ASC NULLS FIRST`,
+    );
 
     const validData = raw.filter((item) => {
       const remarks = item.remarks;
@@ -68,13 +61,12 @@ export async function fetchMembersWithBiography(): Promise<{
 
     let fatherMap: Record<number, string> = {};
     if (fatherIds.length > 0) {
-      const { data: fathers, error: fe } = await supabase
-        .from("family_members")
-        .select("id,name")
-        .in("id", fatherIds);
-      if (fe) throw fe;
+      const fathers = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [fatherIds],
+      );
       fatherMap = Object.fromEntries(
-        (fathers ?? []).map((f) => [numId(f.id), String(f.name)]),
+        fathers.map((f) => [numId(f.id), String(f.name)]),
       );
     }
 
@@ -85,13 +77,12 @@ export async function fetchMembersWithBiography(): Promise<{
 
     let spouseMap: Record<number, string> = {};
     if (spouseIds.length > 0) {
-      const { data: spouses, error: se } = await supabase
-        .from("family_members")
-        .select("id,name")
-        .in("id", spouseIds);
-      if (se) throw se;
+      const spouses = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [spouseIds],
+      );
       spouseMap = Object.fromEntries(
-        (spouses ?? []).map((s) => [numId(s.id), String(s.name)]),
+        spouses.map((s) => [numId(s.id), String(s.name)]),
       );
     }
 
@@ -118,7 +109,6 @@ export async function fetchMembersWithBiography(): Promise<{
       };
     });
 
-    // 检查用户是否登录
     const { user } = await requireUser();
 
     return { data: transformedData, error: null, requireAuth: !user };

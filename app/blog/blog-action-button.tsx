@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Plus, Lock, LogIn } from "lucide-react";
 import { LoginDialog } from "@/components/login-dialog";
-import { createClient } from "@/lib/supabase/client";
+import { checkClientAuth } from "@/app/auth/actions";
 
 export function BlogActionButton() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
@@ -13,9 +13,8 @@ export function BlogActionButton() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      setIsLoggedIn(!!user);
+      const { loggedIn } = await checkClientAuth();
+      setIsLoggedIn(loggedIn);
     };
     checkAuth();
   }, []);

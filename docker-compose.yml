@@ -1,7 +1,25 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  # 生产环境
+  postgres:
+    image: postgres:16-alpine
+    container_name: genealogy-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-genealogy}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-genealogy}
+      POSTGRES_DB: ${POSTGRES_DB:-genealogy}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-genealogy} -d ${POSTGRES_DB:-genealogy}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   app:
     build:
       context: .
@@ -11,17 +29,15 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # 持久化数据库和备份
-      - ./data:/app/data
       - ./backups:/app/backups
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-陈}
-      # 本机 Supabase CLI（npx supabase start）API 默认 54321；容器内访问宿主机请配合 extra_hosts
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-http://host.docker.internal:54321}
-      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - DATABASE_URL=${DATABASE_URL:-postgresql://genealogy:genealogy@postgres:5432/genealogy}
+      - AUTH_SECRET=${AUTH_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
@@ -30,7 +46,6 @@ services:
       retries: 3
       start_period: 40s
 
-  # 开发环境（可选）
   dev:
     build:
       context: .
@@ -40,49 +55,49 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # 源代码热重载
       - .:/app
       - /app/node_modules
-      # 持久化数据库
-      - ./data:/app/data
       - ./backups:/app/backups
     environment:
       - NODE_ENV=development
       - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-陈}
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-http://host.docker.internal:54321}
-      - NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://genealogy:genealogy@host.docker.internal:5432/genealogy}
+      - AUTH_SECRET=${AUTH_SECRET}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: npm run dev
     profiles:
       - dev
 
-  # 自动备份服务（可选）
   backup:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
+    image: postgres:16-alpine
     container_name: genealogy-backup
     volumes:
-      - ./data:/app/data
-      - ./backups:/app/backups
+      - ./backups:/backups
     environment:
-      - NODE_ENV=production
-    # 每天凌晨 2 点执行备份
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-genealogy}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-genealogy}
+      PGDATABASE: ${POSTGRES_DB:-genealogy}
     command: >
       sh -c "
         while true; do
           sleep 60
-          current_hour=$$(date +%H)
-          current_min=$$(date +%M)
-          if [ \"$$current_hour\" = \"02\" ] && [ \"$$current_min\" = \"00\" ]; then
-            echo \"[$$(date)] Running backup...\"
-            npm run db:backup
+          h=$$(date +%H)
+          m=$$(date +%M)
+          if [ \"$$h\" = \"02\" ] && [ \"$$m\" = \"00\" ]; then
+            ts=$$(date -u +%Y-%m-%dT%H-%M-%S)
+            pg_dump -Fc -f /backups/genealogy-$$ts.dump
             sleep 60
           fi
         done
       "
     profiles:
       - backup
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  postgres_data:

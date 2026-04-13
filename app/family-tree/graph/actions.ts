@@ -1,7 +1,7 @@
 "use server";
 
 import { requireUser, numId } from "@/lib/auth/session";
-import { createClient } from "@/lib/supabase/server";
+import { query, queryOne } from "@/lib/pg";
 import { formatActionError } from "@/lib/format-action-error";
 
 export interface FamilyMemberNode {
@@ -29,19 +29,15 @@ export interface FetchGraphResult {
 
 export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
   try {
-    const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("family_members")
-      .select(
-        "id, name, generation, sibling_order, father_id, gender, official_position, is_alive, spouse_id, is_married_in, remarks, birthday, death_date, residence_place",
-      )
-      .eq("is_married_in", false)
-      .order("generation", { ascending: true, nullsFirst: true })
-      .order("sibling_order", { ascending: true, nullsFirst: true });
+    const rows = await query<Record<string, unknown>>(
+      `SELECT id, name, generation, sibling_order, father_id, gender,
+              official_position, is_alive, spouse_id, is_married_in,
+              remarks, birthday, death_date, residence_place
+       FROM family_members
+       WHERE is_married_in = false
+       ORDER BY generation ASC NULLS FIRST, sibling_order ASC NULLS FIRST`,
+    );
 
-    if (error) throw error;
-
-    const rows = (data ?? []) as Record<string, unknown>[];
     const spouseIds = rows
       .map((item) => item.spouse_id)
       .filter((id): id is number | string => id != null)
@@ -49,13 +45,12 @@ export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
 
     let spouseMap: Record<number, string> = {};
     if (spouseIds.length > 0) {
-      const { data: spouses, error: se } = await supabase
-        .from("family_members")
-        .select("id,name")
-        .in("id", spouseIds);
-      if (se) throw se;
+      const spouses = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [spouseIds],
+      );
       spouseMap = Object.fromEntries(
-        (spouses ?? []).map((s) => [numId(s.id), String(s.name)]),
+        spouses.map((s) => [numId(s.id), String(s.name)]),
       );
     }
 
@@ -96,32 +91,29 @@ export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
 export async function fetchMemberById(
   id: number,
 ): Promise<FamilyMemberNode | null> {
-  const { supabase, user, error: authError } = await requireUser();
+  const { user, error: authError } = await requireUser();
   if (!user) {
     console.error("fetchMemberById graph:", authError);
     return null;
   }
 
   try {
-    const { data, error } = await supabase
-      .from("family_members")
-      .select(
-        "id, name, generation, sibling_order, father_id, gender, official_position, is_alive, spouse_id, is_married_in, remarks, birthday, death_date, residence_place",
-      )
-      .eq("id", id)
-      .maybeSingle();
-
-    if (error) throw error;
+    const data = await queryOne<Record<string, unknown>>(
+      `SELECT id, name, generation, sibling_order, father_id, gender,
+              official_position, is_alive, spouse_id, is_married_in,
+              remarks, birthday, death_date, residence_place
+       FROM family_members WHERE id = $1`,
+      [id],
+    );
     if (!data) return null;
 
-    const item = data as Record<string, unknown>;
+    const item = data;
     let spouse_name: string | null = null;
     if (item.spouse_id != null) {
-      const { data: spouse } = await supabase
-        .from("family_members")
-        .select("name")
-        .eq("id", numId(item.spouse_id))
-        .maybeSingle();
+      const spouse = await queryOne<{ name: string }>(
+        `SELECT name FROM family_members WHERE id = $1`,
+        [numId(item.spouse_id)],
+      );
       spouse_name = spouse?.name != null ? String(spouse.name) : null;
     }
 
