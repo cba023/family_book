@@ -5,140 +5,174 @@
 </p>
 
 <p align="center">
-  一个基于 Next.js 15 和 Supabase 构建的现代化、全中文家族族谱管理系统。
+  基于 Next.js（App Router）与 PostgreSQL 的全中文家族族谱与博客应用，支持 Docker 部署与首次启动向导。
 </p>
 
 ## ✨ 项目亮点
 
-- **前沿技术栈**: 采用最新的 **Next.js 15** (App Router) 和 **React 19**。
-- **全栈无服务**: 后端使用 **Supabase**，提供高性能数据库、身份认证及实时订阅功能。
-- **深度中文化**: 针对中文语境深度定制，包括 UI 文案、日期格式、元数据及字辈统计。
-- **多维可视化 (v2.0升级)**:
-  - **2D 族谱图**: 全新升级的渲染引擎。支持**世代标尺**指引、**松柏绿瀑布式**代际渐变色、**配偶直显**。提供“金线溯源”与“金扇繁衍”的双向高亮交互，支持高清大图导出。
-  - **3D 关系网**: 沉浸式三维力导向图，新增**自动巡游 (Auto Tour)** 功能，可自动规划路径并在家族成员间漫游。
-  - **家族统计**: 多维度数据仪表盘，包含世代增长趋势、字辈统计等。
-  - **历史时间轴**: 直观展示家族成员的生卒年时间分布。
+- **前沿技术栈**: **Next.js** (App Router)、**React 19**、TypeScript。
+- **数据与认证**: **PostgreSQL** 持久化；自建会话（JWT Cookie + bcrypt），无第三方 BaaS 绑定。
+- **首次启动向导**: 浏览器内配置数据库连接、执行建表脚本、创建超级管理员（`/setup`）。
+- **深度中文化**: UI、日期与统计针对中文语境优化。
+- **多维可视化**:
+  - **2D 族谱图**: 世代标尺、代际配色、配偶展示、溯源/繁衍高亮、大图导出。
+  - **3D 关系网**: 力导向图与自动巡游。
+  - **家族统计**: 世代、性别、在世比例等。
+  - **历史时间轴**: 生卒年分布。
 - **沉浸式体验**:
-  - **"Living Book" 详情页**: 独创的 3D 翻书/画卷交互，正面展示档案，背面展示生平。
-  - **富文本生平**: 集成 Slate.js 编辑器，支持排版精美的生平传记，阅读模式支持**逐字书写/毛笔扫过**的艺术动效。
+  - **传记书模式**: 3D 翻书/画卷式详情与 Slate 富文本生平编辑。
 
 ## 🛠️ 技术栈
 
-- **框架**: [Next.js 15](https://nextjs.org/) (App Router, Server Actions)
-- **数据库 & 认证**: [Supabase](https://supabase.com/) (PostgreSQL + Auth + Realtime)
-- **UI 组件库**: [shadcn/ui](https://ui.shadcn.com/) (基于 Radix UI)
-- **样式**: [Tailwind CSS](https://tailwindcss.com/)
-- **可视化**: 
-  - [@xyflow/react](https://reactflow.dev/) (2D Graph)
-  - [react-force-graph-3d](https://github.com/vasturiano/react-force-graph-3d) (3D Graph)
-  - [recharts](https://recharts.org/) (Charts)
-- **富文本**: [Slate.js](https://docs.slatejs.org/) (生平事迹编辑)
-- **工具**: TypeScript, ESLint, Lucide React (图标), html-to-image (图片导出)
+- **框架**: [Next.js](https://nextjs.org/) (App Router, Server Actions)
+- **数据库**: [PostgreSQL](https://www.postgresql.org/)（`pg` 驱动）
+- **UI**: [shadcn/ui](https://ui.shadcn.com/)（Radix UI）、[Tailwind CSS](https://tailwindcss.com/)
+- **可视化**: [@xyflow/react](https://reactflow.dev/)、[react-force-graph-3d](https://github.com/vasturiano/react-force-graph-3d)、[recharts](https://recharts.org/)
+- **富文本**: [Slate.js](https://docs.slatejs.org/)
+- **容器**: Docker / Docker Compose
 
 ## 🚀 主要功能
 
 ### 1. 核心管理 (`/family-tree`)
-- **成员档案**: 记录姓名、字辈、父母、配偶、生卒年、居住地、官职等详细信息。
-- **富文本生平**: 支持加粗、斜体等格式的生平事迹记录。
-- **Living Book 交互**: 详情页采用拟物化设计，PC 端呈现书卷质感，移动端为全屏卡片。
-- **便捷操作**: 支持成员搜索、增删改查、以及 Excel/CSV 数据的批量导入导出。
+
+成员档案、富文本生平、批量导入导出、权限（超级管理员 / 管理员 / 用户）。
 
 ### 2. 可视化视图
-- **2D 族谱图 (`/family-tree/graph`)**: 
-  - **自动布局**: 基于 Dagre 算法的层级树状图。
-  - **视觉增强**: 左侧自动生成水墨风“世代标尺”，节点根据代数深浅渐变。
-  - **交互体验**: 点击节点触发“金线溯源”（高亮祖先路径）和“金扇繁衍”（高亮子孙路径）。
-  - **图片导出**: 支持一键导出带背景和水印的高清家族树图片。
-- **3D 力导向图 (`/family-tree/graph-3d`)**: 
-  - **星空漫游**: 炫酷的 3D 节点展示。
-  - **自动巡游**: 自动计算任意两名成员间的最短关系路径，并控制相机自动飞行浏览。
-- **统计仪表盘 (`/family-tree/statistics`)**: 家族人口概览、性别/在世比例、世代增长趋势、年龄分布、字辈频率统计。
-- **时间轴 (`/family-tree/timeline`)**: 横向时间轴展示家族历史跨度。
 
-### 3. 系统功能
-- **安全认证**: 完整的注册、登录、密码重置流程 (Supabase Auth)，登录页采用水墨山水风格。
-- **实时同步**: 多端数据实时更新。
-- **响应式设计**: 完美适配桌面端与移动端，针对移动端优化了导航和工具栏布局，支持明暗主题切换。
+2D 族谱图、3D 关系网、统计仪表盘、时间轴、传记书模式等。
 
-## 📦 快速开始
+### 3. 博客 (`/blog`)
 
-### 1. 克隆项目
+文章发布与浏览（含 hash 链接）。
+
+### 4. 认证与系统
+
+注册登录、站内用户管理；中间件在配置好环境变量后保护部分路由。
+
+---
+
+## 📦 本地开发
+
+### 1. 克隆与安装
 
 ```bash
-git clone https://github.com/yunfengsa/pure-genealogy.git
-cd pure-genealogy
-```
-
-### 2. 安装依赖
-
-```bash
+git clone <你的仓库地址>
+cd family_book
 npm install
 ```
 
-### 3. 配置环境变量
+### 2. 准备 PostgreSQL
 
-复制 `.env.example` (或新建) 为 `.env.local` 并填入 Supabase 项目配置：
+任选其一：
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=你的_Supabase_项目_URL
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=你的_Supabase_Anon_Key
-```
+- 本机或 Docker 运行 PostgreSQL（示例：`docker run` / 项目自带 `docker-compose.yml` 中的 `postgres` 服务）。
+- 记下连接串，形如：`postgresql://用户:密码@主机:5432/数据库名`。
 
-### 4. 初始化数据库
+### 3. 环境变量（可选）
 
-在 Supabase 项目的 SQL Editor 中执行以下脚本以创建核心表：
+复制 `.env.example` 为 `.env.local`。也可先不填：启动后通过 **`/setup`** 向导写入连接信息（并会合并进 `.env.local`）。
 
-```sql
-CREATE TABLE family_members (
-    id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name text NOT NULL,
-    generation integer,
-    sibling_order integer,
-    father_id bigint REFERENCES family_members(id),
-    gender text CHECK (gender IN ('男', '女')),
-    official_position text,
-    is_alive boolean DEFAULT true,
-    spouse text,
-    remarks text, -- 存储 Slate.js 富文本 JSON 数据
-    birthday date,
-    death_date date,
-    residence_place text,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
-);
+| 变量 | 说明 |
+|------|------|
+| `DATABASE_URL` | PostgreSQL 连接串 |
+| `AUTH_SECRET` | 至少 16 字符，用于签发登录 Cookie |
+| `NEXT_PUBLIC_FAMILY_SURNAME` | 站点展示的姓氏，默认「陈」 |
 
--- 创建索引优化查询
-CREATE INDEX idx_family_members_father_id ON family_members(father_id);
-CREATE INDEX idx_family_members_name ON family_members(name);
-```
+### 4. 数据库表结构
 
-### 5. 启动开发服务器
+- 推荐：浏览器打开应用后走 **`/setup`**，在向导中执行 **`docker/postgres/init.sql`**。
+- 或手动：`psql $DATABASE_URL -f docker/postgres/init.sql`
+
+### 5. 启动
 
 ```bash
 npm run dev
 ```
 
-访问 [http://localhost:3000](http://localhost:3000) 开始使用。
+访问 [http://localhost:3000](http://localhost:3000)。未完成初始化时会进入 **`/setup`**。
 
-## 📂 项目结构
+---
+
+## 🐳 部署说明（Docker）
+
+应用与数据库**分开展示**：镜像内为 Next.js 生产构建（standalone），PostgreSQL 使用官方镜像或外部托管库。
+
+### 方式一：Docker Compose（推荐）
+
+项目根目录已提供编排：
+
+**开发/单机常用：`docker-compose.yml`**
+
+```bash
+# 必填：会话密钥（生产请用强随机串）
+export AUTH_SECRET='请替换为至少16位随机字符串'
+
+docker compose up -d --build
+```
+
+- **应用**: [http://localhost:3000](http://localhost:3000)
+- **Postgres**: 默认用户/库 `genealogy`，密码 `genealogy`，端口 `5432`（可通过环境变量覆盖，见 compose 文件）。
+- 首次访问按向导完成 **`/setup`**（若库已初始化且已有用户，将直接进入站点）。
+
+**生产参考：`docker-compose.prod.yml`**
+
+```bash
+export AUTH_SECRET='你的强随机密钥'
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+与默认 compose 类似，附带资源限制、日志轮转等示例，可按机器调整。
+
+### 方式二：仅构建应用镜像
+
+```bash
+docker build -t family-book:latest --target production .
+```
+
+运行时需自行提供 PostgreSQL，并注入环境变量，例如：
+
+```bash
+docker run -d --name family-book-app -p 3000:3000 \
+  -e DATABASE_URL='postgresql://用户:密码@数据库主机:5432/库名' \
+  -e AUTH_SECRET='至少16位随机串' \
+  -e NEXT_PUBLIC_FAMILY_SURNAME='陈' \
+  family-book:latest
+```
+
+`DATABASE_URL` 中的主机名在容器网络内应指向可解析的 Postgres 服务（例如同一 compose 中的服务名 `postgres`）。
+
+### 持久化与数据目录
+
+| 内容 | 说明 |
+|------|------|
+| Postgres 数据卷 | Compose 中 `postgres_data` / `genealogy-pg-data` 等，勿删以免丢库 |
+| `backups/` | 可选挂载，配合 `npm run db:backup`（需宿主机有 `pg_dump`） |
+| `/app/data`（容器内） | 向导可能写入 `runtime-config.json`；生产建议 **挂载 volume 到 `/app/data`**，避免重启丢本地配置态 |
+
+### 构建说明
+
+- 生产镜像使用 **Next.js standalone** 输出，入口为 `node server.js`。
+- 构建阶段设置 `SKIP_SETUP_GATE=1`，避免 CI/无库环境下 `next build` 被安装向导逻辑阻塞。
+- 镜像内包含 **`docker/postgres/init.sql`**，供向导在容器内执行建表。
+
+### 安全建议
+
+- **切勿**将 `AUTH_SECRET`、数据库密码提交到仓库；生产使用密钥管理或编排注入。
+- 向导完成后若提示重启：修改 `.env` 或编排环境变量后，**重启应用容器**可使中间件与进程内环境一致。
+
+---
+
+## 📂 项目结构（节选）
 
 ```
-/
-├── app/                  # Next.js App Router 核心目录
-│   ├── auth/             # 认证流程页面
-│   ├── family-tree/      # 族谱主要功能区
-│   │   ├── graph/        # 2D 视图 (React Flow)
-│   │   ├── graph-3d/     # 3D 视图 (Force Graph)
-│   │   ├── statistics/   # 统计仪表盘
-│   │   ├── timeline/     # 时间轴
-│   │   ├── biography-book/ # 传记书模式
-│   │   └── page.tsx      # 成员列表
-│   └── ...
-├── components/           # React 组件
-│   ├── ui/               # shadcn/ui 基础组件
-│   ├── rich-text/        # Slate 富文本编辑器组件
-│   └── ...
-├── lib/                  # 工具函数与 Supabase 客户端配置
-└── hooks/                # 自定义 Hooks
+├── app/                    # App Router：族谱、博客、认证、/setup 向导
+├── components/
+├── docker/postgres/        # 初始化 SQL（init.sql）
+├── lib/                    # pg、认证、运行时配置等
+├── proxy.ts                # Next 中间件入口
+├── Dockerfile
+├── docker-compose.yml
+└── docker-compose.prod.yml
 ```
 
 ## 📄 许可证
