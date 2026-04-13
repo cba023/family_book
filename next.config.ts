@@ -1,32 +1,43 @@
 import type { NextConfig } from "next";
 
 /**
- * 公网经反向代理访问时，若浏览器 Origin 与 Host / X-Forwarded-Host 不完全一致，
- * Next.js 会拦截 Server Action（含登录），表现为登录无报错但会话不生效。
- * 构建镜像前设置，例如：SERVER_ACTIONS_ALLOWED_ORIGINS=example.com,www.example.com
- * 支持通配域名片段（见 Next.js `experimental.serverActions.allowedOrigins` 文档）。
+ * Server Actions（登录、表单等）会做 Origin 与 Host 校验。
+ * 内网穿透 / 花生壳 / cpolar / 反代下两者常不一致，导致「登录后状态不变」。
+ *
+ * 默认始终启用 allowedOrigins: ['**']，与穿透、多域名、局域网直连均可开箱即用（家庭族谱场景）。
+ * 若你对外提供多用户 SaaS 且反代已严格对齐 Host，可在**构建时**设 SERVER_ACTIONS_STRICT_ORIGIN=1，
+ * 并可选 SERVER_ACTIONS_ALLOWED_ORIGINS 白名单（逗号分隔，含端口时写 host:port）。
  */
-function serverActionsAllowedOriginsFromEnv(): string[] | undefined {
-  const raw = process.env.SERVER_ACTIONS_ALLOWED_ORIGINS?.trim();
-  if (!raw) return undefined;
-  const list = raw.split(",").map((s) => s.trim()).filter(Boolean);
-  return list.length > 0 ? list : undefined;
+function serverActionsExperimental():
+  | { serverActions: { allowedOrigins: string[] } }
+  | undefined {
+  if (process.env.SERVER_ACTIONS_STRICT_ORIGIN === "1") {
+    const raw = process.env.SERVER_ACTIONS_ALLOWED_ORIGINS?.trim();
+    if (!raw) {
+      return undefined;
+    }
+    if (raw === "**") {
+      return { serverActions: { allowedOrigins: ["**"] } };
+    }
+    const list = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (list.length === 0) {
+      return undefined;
+    }
+    return { serverActions: { allowedOrigins: list } };
+  }
+  return { serverActions: { allowedOrigins: ["**"] } };
 }
 
-const serverActionsAllowedOrigins = serverActionsAllowedOriginsFromEnv();
+const serverActionsExp = serverActionsExperimental();
 
 const nextConfig: NextConfig = {
   // 会话依赖 cookies()；开启 cacheComponents 可能导致预渲染阶段 cookies() 失败
   cacheComponents: false,
   output: 'standalone', // 优化 Docker 构建
   poweredByHeader: false, // 隐藏 X-Powered-By 头
-  ...(serverActionsAllowedOrigins
+  ...(serverActionsExp
     ? {
-        experimental: {
-          serverActions: {
-            allowedOrigins: serverActionsAllowedOrigins,
-          },
-        },
+        experimental: serverActionsExp,
       }
     : {}),
   async headers() {

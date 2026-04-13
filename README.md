@@ -76,8 +76,10 @@ npm install
 |------|------|
 | `DATABASE_URL` | PostgreSQL 连接串 |
 | `AUTH_SECRET` | 至少 16 字符，用于签发登录 Cookie |
-| `AUTH_INSECURE_COOKIE` | 设为 `1` 时允许在 **HTTP**（非 HTTPS）下写入会话 Cookie；Docker 常用 `http://IP:3000` 访问时需开启。已用 HTTPS 反向代理时可不设或设为 `0` |
-| `SERVER_ACTIONS_ALLOWED_ORIGINS` | **构建镜像时**生效，逗号分隔的公网域名（如 `example.com,www.example.com`）。经反向代理登录无效时用于放宽 Next.js Server Actions 的 Origin 校验（与 `Host` / `X-Forwarded-Host` 对齐或显式白名单） |
+| `AUTH_USE_SECURE_COOKIE` | 设为 `1` 时会话 Cookie 带 **Secure**（仅浏览器走 HTTPS 时可靠，适合纯 HTTPS 站点）。**默认不设**：HTTP / HTTPS 均可登录（花生壳 HTTP、内网 IP 等开箱即用） |
+| `AUTH_INSECURE_COOKIE` | （兼容旧版）`1` 强制非 Secure，`0` 强制 Secure；新项目可忽略，用上一行即可 |
+| `SERVER_ACTIONS_STRICT_ORIGIN` | **构建镜像时**设为 `1` 可关闭默认的 Origin 放宽（见下文「严格模式」）；一般家庭部署**不必设** |
+| `SERVER_ACTIONS_ALLOWED_ORIGINS` | 仅在 **`SERVER_ACTIONS_STRICT_ORIGIN=1`** 时生效：逗号分隔白名单（非 80/443 须写 `主机:端口`）；也可设为 `**` |
 | `NEXT_PUBLIC_FAMILY_SURNAME` | 站点展示的姓氏，默认「陈」 |
 
 ### 4. 数据库表结构
@@ -114,7 +116,7 @@ docker compose up -d --build
 
 - **应用**: [http://localhost:3000](http://localhost:3000)
 - **Postgres**: 默认用户/库 `genealogy`，密码 `genealogy`，端口 `5432`（可通过环境变量覆盖，见 compose 文件）。
-- Compose 已默认 `AUTH_INSECURE_COOKIE=1`，避免仅用 **HTTP** 访问时登录 Cookie 无法保存（若登录一直无效，请确认未在环境中误删该变量）。
+- 会话 Cookie **默认即支持 HTTP**（无需再配 `AUTH_INSECURE_COOKIE`）。仅对外全站 HTTPS 时建议加 `AUTH_USE_SECURE_COOKIE=1`。
 - 首次访问按向导完成 **`/setup`**（若库已初始化且已有用户，将直接进入站点）。
 
 **生产参考：`docker-compose.prod.yml`**
@@ -135,6 +137,15 @@ npm run docker:build
 ```
 
 **导出为本地 tar 包**（U 盘 / 内网离线机）：
+
+**内网穿透（花生壳、cpolar 等）**：镜像已默认兼容，**无需再设** `SERVER_ACTIONS_*`，直接构建即可：
+
+```bash
+npm run docker:build:amd64
+npm run docker:save:amd64
+```
+
+一般离线包：
 
 ```bash
 npm run docker:build
@@ -161,7 +172,6 @@ docker run -d --name familybook-app -p 3000:3000 \
   -v familybook-data:/app/data \
   -e DATABASE_URL='postgresql://用户:密码@数据库主机:5432/库名' \
   -e AUTH_SECRET='至少16位随机串' \
-  -e AUTH_INSECURE_COOKIE=1 \
   -e NEXT_PUBLIC_FAMILY_SURNAME='陈' \
   familybook:latest
 ```
@@ -183,15 +193,12 @@ docker run -d --name familybook-app -p 3000:3000 \
 
    若对 HTML 做了 **共享缓存**，可能一直返回「未登录」的旧页面；应对页面关闭缓存或保证 `Cache-Control: private`。
 
-2. **Next.js Server Actions 的 Origin 校验**  
-   仍报错或登录无会话时，在**构建镜像前**设置白名单并重新 build（Compose 已把该变量传入 `build.args`）：
+2. **Next.js Server Actions 与内网穿透**  
+   本项目在 `next.config` 中**默认**为 Server Actions 启用 `allowedOrigins: ['**']`，花生壳、cpolar、反代、局域网直连一般**开箱即用**，无需再配构建变量。  
+   若仍异常，请检查 Nginx 是否误缓存 HTML。HTTP 访问无需再配 Cookie 相关变量（默认已支持）。
 
-   ```bash
-   export SERVER_ACTIONS_ALLOWED_ORIGINS='example.com,www.example.com'
-   docker compose build --no-cache app
-   ```
-
-   或使用：`docker build --build-arg SERVER_ACTIONS_ALLOWED_ORIGINS='example.com,www.example.com' -t familybook:amd64 --target production .`
+3. **严格模式（可选，面向反代已对齐 Host 的站点）**  
+   构建时设 `SERVER_ACTIONS_STRICT_ORIGIN=1` 将恢复 Next 默认的 Origin 校验；若此时登录再失败，请同时设置 `SERVER_ACTIONS_ALLOWED_ORIGINS`（逗号分隔你的公网 `主机` 或 `主机:端口`），或设为 `**` 与默认行为相同。
 
 ### 持久化与数据目录
 
