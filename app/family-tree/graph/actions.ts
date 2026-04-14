@@ -47,7 +47,7 @@ export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
       const mid = numId(r.id);
       const raw = r.spouse_ids;
       const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
-      spouseIdsMap[mid] = ids;
+      spouseIdsMap[mid] = [...new Set(ids)];
       spouseNamesMap[mid] = [];
     }
     const allSpouseIds = Object.values(spouseIdsMap).flat();
@@ -123,18 +123,20 @@ export async function fetchMemberById(
     const memberId = numId(item.id);
 
     // 获取配偶（直接从 spouse_ids 数组）
+    const rawSpouseIds = item.spouse_ids;
+    const uniqueIds = [...new Set(
+      Array.isArray(rawSpouseIds) ? rawSpouseIds.map(numId).filter((v) => !isNaN(v)) : []
+    )];
     const spouseNames: string[] = [];
     const spouseIds: number[] = [];
-    const rawSpouseIds = item.spouse_ids;
-    const ids = Array.isArray(rawSpouseIds) ? rawSpouseIds.map(numId).filter((v) => !isNaN(v)) : [];
-    if (ids.length > 0) {
-      const spouseRows = await query<{ name: string }>(
-        `SELECT name FROM family_members WHERE id = ANY($1::bigint[])`,
-        [ids],
+    if (uniqueIds.length > 0) {
+      const spouseRows = await query<{ id: bigint; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [uniqueIds],
       );
       for (const s of spouseRows) {
+        spouseIds.push(numId(s.id));
         spouseNames.push(String(s.name));
-        spouseIds.push(numId(s));
       }
     }
 

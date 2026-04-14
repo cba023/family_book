@@ -51,6 +51,7 @@ export function UserRoleTable({ initialUsers, currentUserId }: Props) {
           {message}
         </p>
       )}
+
       <Table>
         <TableHeader>
           <TableRow>

@@ -44,7 +44,7 @@ function mapMemberRow(
   const rawSpouseIds = item.spouse_ids;
   let spouseIds: number[] = [];
   if (Array.isArray(rawSpouseIds)) {
-    spouseIds = rawSpouseIds.map((v) => numId(v)).filter((v) => !isNaN(v));
+    spouseIds = [...new Set(rawSpouseIds.map((v) => numId(v)).filter((v) => !isNaN(v)))];
   }
   return {
     id,
@@ -362,7 +362,7 @@ export async function fetchMembersForTimeline(): Promise<{
       const mid = numId(r.id);
       const raw = r.spouse_ids;
       const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
-      spouseIdsMap[mid] = ids;
+      spouseIdsMap[mid] = [...new Set(ids)];
       spouseNamesMap[mid] = []; // 名字稍后统一查询填充
     }
 
@@ -448,15 +448,17 @@ export async function fetchMemberById(id: number): Promise<FamilyMember | null> 
 
     // 获取配偶（直接从 spouse_ids 数组）
     const memberId = numId(item.id);
-    const spouseNames: string[] = [];
     const rawSpouseIds = item.spouse_ids;
-    const spouseIds = Array.isArray(rawSpouseIds)
-      ? rawSpouseIds.map(numId).filter((v) => !isNaN(v))
-      : [];
-    if (spouseIds.length > 0) {
+    const uniqueSpouseIds = [...new Set(
+      Array.isArray(rawSpouseIds)
+        ? rawSpouseIds.map(numId).filter((v) => !isNaN(v))
+        : []
+    )];
+    const spouseNames: string[] = [];
+    if (uniqueSpouseIds.length > 0) {
       const spouseRows = await query<{ name: string }>(
         `SELECT name FROM family_members WHERE id = ANY($1::bigint[])`,
-        [spouseIds],
+        [uniqueSpouseIds],
       );
       for (const s of spouseRows) {
         spouseNames.push(String(s.name));
@@ -476,7 +478,7 @@ export async function fetchMemberById(id: number): Promise<FamilyMember | null> 
       official_position:
         item.official_position != null ? String(item.official_position) : null,
       is_alive: Boolean(item.is_alive),
-      spouse_ids: spouseIds,
+      spouse_ids: uniqueSpouseIds,
       spouse_names: spouseNames,
       is_married_in: Boolean(item.is_married_in),
       remarks: item.remarks != null ? String(item.remarks) : null,
