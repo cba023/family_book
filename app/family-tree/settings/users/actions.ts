@@ -364,3 +364,66 @@ export async function deleteManagedUser(
     return { success: false, error: formatActionError(e) };
   }
 }
+
+/** 任何登录用户修改自己的姓名和手机号 */
+export async function updateOwnProfile(
+  input: {
+    fullName?: string;
+    phone?: string;
+  },
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const gate = await getUserRole();
+    if (!gate.user) {
+      return { success: false, error: "未登录" };
+    }
+
+    const fnCheck = validateOptionalFullName(input.fullName);
+    if (!fnCheck.ok) {
+      return { success: false, error: fnCheck.error };
+    }
+    const phCheck = validateOptionalPhone(input.phone);
+    if (!phCheck.ok) {
+      return { success: false, error: phCheck.error };
+    }
+
+    await getPool().query(
+      `UPDATE profiles SET full_name = $1, phone = $2 WHERE id = $3`,
+      [fnCheck.value, phCheck.value, gate.user.id],
+    );
+
+    revalidatePath("/family-tree/settings/users");
+    revalidatePath("/family-tree", "layout");
+    return { success: true, error: null };
+  } catch (e) {
+    console.error("updateOwnProfile", e);
+    return { success: false, error: formatActionError(e) };
+  }
+}
+
+/** 任何登录用户修改自己的密码 */
+export async function changeOwnPassword(
+  newPassword: string,
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const gate = await getUserRole();
+    if (!gate.user) {
+      return { success: false, error: "未登录" };
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return { success: false, error: "密码至少 6 位" };
+    }
+    const hash = await hashPassword(newPassword);
+    const r = await getPool().query(
+      `UPDATE app_users SET password_hash = $1 WHERE id = $2`,
+      [hash, gate.user.id],
+    );
+    if (r.rowCount === 0) {
+      return { success: false, error: "用户不存在" };
+    }
+    return { success: true, error: null };
+  } catch (e) {
+    console.error("changeOwnPassword", e);
+    return { success: false, error: formatActionError(e) };
+  }
+}

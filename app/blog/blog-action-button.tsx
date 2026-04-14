@@ -12,12 +12,14 @@ import { checkClientAuth } from "@/app/auth/actions";
 export function BlogActionButton() {
   const router = useRouter();
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [canPost, setCanPost] = useState<boolean | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { loggedIn } = await checkClientAuth();
-      setIsLoggedIn(loggedIn);
+      const result = await checkClientAuth();
+      setIsLoggedIn(result.loggedIn);
+      setCanPost(result.canPost);
     };
     checkAuth();
   }, []);
@@ -27,7 +29,12 @@ export function BlogActionButton() {
     return null;
   }
 
-  if (isLoggedIn) {
+  // 普通用户隐藏写文章按钮
+  if (isLoggedIn && !canPost) {
+    return null;
+  }
+
+  if (isLoggedIn && canPost) {
     return (
       <Link href="/blog/new">
         <Button>
@@ -40,12 +47,17 @@ export function BlogActionButton() {
 
   return (
     <>
+      <Button onClick={() => setLoginOpen(true)}>
+        <LogIn className="w-4 h-4 mr-2" />
+        登录
+      </Button>
       <LoginDialog
         open={loginOpen}
         onOpenChange={setLoginOpen}
         onSuccess={() => {
-          setIsLoggedIn(true);
           refreshSessionAfterLogin(router);
+          // 刷新页面以获取最新权限
+          router.refresh();
         }}
       />
     </>

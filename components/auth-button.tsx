@@ -65,7 +65,10 @@ export function AuthButton({ user, profile }: AuthButtonProps) {
 
   return (
     <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 shrink-0">
-      <span className="text-xs md:text-sm font-medium truncate max-w-[220px] md:max-w-none text-muted-foreground">
+      <Link
+        href="/family-tree/settings/users"
+        className="text-xs md:text-sm font-medium truncate max-w-[220px] md:max-w-none hover:text-primary transition-colors"
+      >
         {accountLabel}
         {showRoleBadge ? (
           <span className="hidden sm:inline text-muted-foreground/80">
@@ -73,7 +76,7 @@ export function AuthButton({ user, profile }: AuthButtonProps) {
             · {roleLabel}
           </span>
         ) : null}
-      </span>
+      </Link>
       <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
         {canMaintain(role) && (
           <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">

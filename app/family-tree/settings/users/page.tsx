@@ -1,37 +1,33 @@
 import { redirect } from "next/navigation";
-import { requireAdminOrSuperAdmin } from "@/lib/auth/session";
-import { getManagedUsers } from "./actions";
-import { UserRoleTable } from "./user-role-table";
-import { AddUserButton } from "./add-user-button";
+import { getUserRole } from "@/lib/auth/session";
+import { queryOne } from "@/lib/pg";
+import { ProfileForm } from "./profile-form";
 
-export default async function SettingsUsersPage() {
-  const gate = await requireAdminOrSuperAdmin();
+export default async function SettingsProfilePage() {
+  const gate = await getUserRole();
   if (!gate.user) {
     redirect("/blog");
   }
 
-  const { users, error } = await getManagedUsers();
+  const profile = await queryOne<{
+    full_name: string | null;
+    phone: string | null;
+  }>(
+    `SELECT full_name, phone FROM profiles WHERE id = $1`,
+    [gate.user.id],
+  );
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl">
-      <div className="flex items-center justify-between mb-2">
-        <h1 className="text-2xl font-bold">用户与角色</h1>
-        <AddUserButton isSuperAdmin={gate.role === "super_admin"} />
-      </div>
-      <p className="text-muted-foreground text-sm mb-6">
-        超级管理员可新建账号，并可将用户设为「管理员」或「普通用户」。管理员可新建普通用户账号。
+    <div className="container mx-auto py-8 px-4 max-w-2xl">
+      <h1 className="text-2xl font-bold mb-2">我的资料</h1>
+      <p className="text-muted-foreground text-sm mb-8">
+        修改您的个人资料和密码。
       </p>
-
-      {error ? (
-        <p className="text-destructive text-sm">{error}</p>
-      ) : (
-        <UserRoleTable
-          initialUsers={users}
-          currentUserId={gate.user.id}
-          currentUserRole={gate.role}
-          isSuperAdmin={gate.role === "super_admin"}
-        />
-      )}
+      <ProfileForm
+        currentUserId={gate.user.id}
+        initialFullName={profile?.full_name ?? null}
+        initialPhone={profile?.phone ?? null}
+      />
     </div>
   );
 }

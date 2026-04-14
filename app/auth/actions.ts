@@ -10,7 +10,7 @@ import {
   validateOptionalFullName,
   validateOptionalPhone,
 } from "@/lib/auth/account-username";
-import { getSessionUserId } from "@/lib/auth/session";
+import { getSessionUserId, getUserRole } from "@/lib/auth/session";
 
 type UserAuthRow = { id: string; password_hash: string };
 
@@ -132,7 +132,8 @@ export async function updateOwnPassword(
   return {};
 }
 
-export async function checkClientAuth(): Promise<{ loggedIn: boolean }> {
-  const id = await getSessionUserId();
-  return { loggedIn: Boolean(id) };
+export async function checkClientAuth(): Promise<{ loggedIn: boolean; canPost: boolean }> {
+  const { user, role } = await getUserRole();
+  const canPost = Boolean(user && (role === "super_admin" || role === "admin"));
+  return { loggedIn: Boolean(user), canPost };
 }

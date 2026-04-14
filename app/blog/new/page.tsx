@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Save, Eye, Image as ImageIcon, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Eye, Image as ImageIcon, Loader2, Shield } from "lucide-react";
 import MarkdownContent from "@/components/markdown-content";
 import { ImageUpload } from "@/components/image-upload";
 import {
@@ -34,6 +34,7 @@ export default function NewBlogPostPage() {
   const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [canPost, setCanPost] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   
   const [title, setTitle] = useState("");
@@ -47,22 +48,17 @@ export default function NewBlogPostPage() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { loggedIn } = await checkClientAuth();
-      if (!loggedIn) {
-        setIsLoggedIn(false);
-        setLoginOpen(true);
-      } else {
-        setIsLoggedIn(true);
-      }
+      const result = await checkClientAuth();
+      setIsLoggedIn(result.loggedIn);
+      setCanPost(result.canPost);
       setIsCheckingAuth(false);
     };
     checkAuth();
   }, []);
 
   const handleLoginSuccess = () => {
-    setIsLoggedIn(true);
-    setLoginOpen(false);
     refreshSessionAfterLogin(router);
+    router.refresh();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -120,6 +116,32 @@ export default function NewBlogPostPage() {
           onOpenChange={setLoginOpen}
           onSuccess={handleLoginSuccess}
         />
+      </div>
+    );
+  }
+
+  // 已登录但无权限
+  if (isLoggedIn && !canPost) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="flex justify-between items-center mb-6">
+          <Link href="/blog">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              返回家族故事
+            </Button>
+          </Link>
+        </div>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+          <Shield className="h-12 w-12 text-muted-foreground mb-4" />
+          <h1 className="text-2xl font-bold mb-2">权限不足</h1>
+          <p className="text-muted-foreground mb-6">
+            只有管理员及以上角色才能发布文章。
+          </p>
+          <Link href="/blog">
+            <Button variant="outline">返回家族故事</Button>
+          </Link>
+        </div>
       </div>
     );
   }
