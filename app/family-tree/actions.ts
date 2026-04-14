@@ -216,16 +216,19 @@ export async function createFamilyMember(
     }
     const newMemberId = numId(row.id);
 
-    // 写入配偶数组（双向）
-    const newSpouseIds = input.spouse_ids ?? [];
-    const allSpouseIdsForNew = [...new Set([newMemberId, ...newSpouseIds])];
+    // 写入配偶数组（双向，去重）
+    const newSpouseIds = [...new Set(input.spouse_ids ?? [])];
     for (const spouseId of newSpouseIds) {
       await getPool().query(
-        `UPDATE family_members SET spouse_ids = array_append(COALESCE(spouse_ids,'{}'), $1::bigint), updated_at = NOW() WHERE id = $2`,
+        `UPDATE family_members SET spouse_ids = array(
+          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
+        ), updated_at = NOW() WHERE id = $2`,
         [spouseId, newMemberId],
       );
       await getPool().query(
-        `UPDATE family_members SET spouse_ids = array_append(COALESCE(spouse_ids,'{}'), $1::bigint), updated_at = NOW() WHERE id = $2`,
+        `UPDATE family_members SET spouse_ids = array(
+          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
+        ), updated_at = NOW() WHERE id = $2`,
         [newMemberId, spouseId],
       );
     }
@@ -379,9 +382,11 @@ export async function fetchMembersForTimeline(): Promise<{
       }
     }
     for (const mid of Object.keys(spouseIdsMap)) {
-      spouseNamesMap[Number(mid)] = spouseIdsMap[Number(mid)]
-        .map((sid) => nameById[sid])
-        .filter(Boolean) as string[];
+      spouseNamesMap[Number(mid)] = [...new Set(
+        spouseIdsMap[Number(mid)]
+          .map((sid) => nameById[sid])
+          .filter(Boolean)
+      )] as string[];
     }
 
     const members = rows.map((item) => {
@@ -460,9 +465,7 @@ export async function fetchMemberById(id: number): Promise<FamilyMember | null> 
         `SELECT name FROM family_members WHERE id = ANY($1::bigint[])`,
         [uniqueSpouseIds],
       );
-      for (const s of spouseRows) {
-        spouseNames.push(String(s.name));
-      }
+      spouseNames.push(...[...new Set(spouseRows.map((s) => String(s.name)))]);
     }
 
     const fid = item.father_id != null ? numId(item.father_id) : null;
@@ -533,15 +536,19 @@ export async function updateFamilyMember(
       ],
     );
 
-    // 写入配偶数组（双向）
-    const newSpouseIds = input.spouse_ids ?? [];
+    // 写入配偶数组（双向，去重）
+    const newSpouseIds = [...new Set(input.spouse_ids ?? [])];
     for (const spouseId of newSpouseIds) {
       await getPool().query(
-        `UPDATE family_members SET spouse_ids = array_append(COALESCE(spouse_ids,'{}'), $1::bigint), updated_at = NOW() WHERE id = $2`,
+        `UPDATE family_members SET spouse_ids = array(
+          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
+        ), updated_at = NOW() WHERE id = $2`,
         [spouseId, input.id],
       );
       await getPool().query(
-        `UPDATE family_members SET spouse_ids = array_append(COALESCE(spouse_ids,'{}'), $1::bigint), updated_at = NOW() WHERE id = $2`,
+        `UPDATE family_members SET spouse_ids = array(
+          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
+        ), updated_at = NOW() WHERE id = $2`,
         [input.id, spouseId],
       );
     }
@@ -655,13 +662,17 @@ export async function batchCreateFamilyMembers(
       }
       if (spouseId === undefined) continue;
 
-      // 双向写入 spouse_ids 数组
+      // 双向写入 spouse_ids 数组（去重）
       await getPool().query(
-        `UPDATE family_members SET spouse_ids = array_append(COALESCE(spouse_ids,'{}'), $1::bigint), updated_at = NOW() WHERE id = $2`,
+        `UPDATE family_members SET spouse_ids = array(
+          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
+        ), updated_at = NOW() WHERE id = $2`,
         [spouseId, selfId],
       );
       await getPool().query(
-        `UPDATE family_members SET spouse_ids = array_append(COALESCE(spouse_ids,'{}'), $1::bigint), updated_at = NOW() WHERE id = $2`,
+        `UPDATE family_members SET spouse_ids = array(
+          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
+        ), updated_at = NOW() WHERE id = $2`,
         [selfId, spouseId],
       );
     }
@@ -909,7 +920,7 @@ export async function exportFamilyMembersToJson(): Promise<{
       const mid = numId(r.id);
       const raw = r.spouse_ids;
       if (Array.isArray(raw)) {
-        const ids = raw.map(numId).filter((v) => !isNaN(v));
+        const ids = [...new Set(raw.map(numId).filter((v) => !isNaN(v)))];
         memberSpouseIdsMap[mid] = ids;
         allSpouseIds.push(...ids);
       }
@@ -923,11 +934,13 @@ export async function exportFamilyMembersToJson(): Promise<{
       for (const s of spouseRows) {
         nameById[numId(s.id)] = String(s.name);
       }
-      // 为每个成员构建其配偶名字列表
+      // 为每个成员构建其配偶名字列表（去重）
       for (const mid of Object.keys(memberSpouseIdsMap)) {
-        spouseNamesMap[Number(mid)] = memberSpouseIdsMap[Number(mid)]
-          .map((sid) => nameById[sid])
-          .filter(Boolean) as string[];
+        spouseNamesMap[Number(mid)] = [...new Set(
+          memberSpouseIdsMap[Number(mid)]
+            .map((sid) => nameById[sid])
+            .filter(Boolean)
+        )] as string[];
       }
     }
 
@@ -1032,14 +1045,19 @@ export async function importFamilyMembersFromGedcom(gedcomContent: string): Prom
           [actualFatherId, actualId]
         );
 
-        // 写入配偶数组（双向）
-        for (const spouseId of spouseIds) {
+        // 写入配偶数组（双向，去重）
+        const uniqueSpouseIds = [...new Set(spouseIds)];
+        for (const spouseId of uniqueSpouseIds) {
           await pool.query(
-            `UPDATE family_members SET spouse_ids = array_append(COALESCE(spouse_ids,'{}'), $1::bigint) WHERE id = $2`,
+            `UPDATE family_members SET spouse_ids = array(
+              SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
+            ) WHERE id = $2`,
             [spouseId, actualId]
           );
           await pool.query(
-            `UPDATE family_members SET spouse_ids = array_append(COALESCE(spouse_ids,'{}'), $1::bigint) WHERE id = $2`,
+            `UPDATE family_members SET spouse_ids = array(
+              SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
+            ) WHERE id = $2`,
             [actualId, spouseId]
           );
         }

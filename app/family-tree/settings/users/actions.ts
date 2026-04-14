@@ -1,6 +1,6 @@
 "use server";
 
-import { requireSuperAdmin } from "@/lib/auth/session";
+import { requireSuperAdmin, requireAdminOrSuperAdmin, getUserRole } from "@/lib/auth/session";
 import { parseAppRole, type AppRole } from "@/lib/auth/roles";
 import {
   validateOptionalFullName,
@@ -20,16 +20,17 @@ export type ManagedUserRow = {
   role: AppRole;
 };
 
-export async function getManagedUsers(): Promise<{
+export async function getManagedUsers(searchQuery?: string): Promise<{
   users: ManagedUserRow[];
   error: string | null;
 }> {
   try {
-    const gate = await requireSuperAdmin();
+    const gate = await requireAdminOrSuperAdmin();
     if (!gate.user) {
       return { users: [], error: gate.error };
     }
 
+    const term = searchQuery?.trim() ?? "";
     const profiles = await query<{
       id: string;
       role: string;
@@ -38,7 +39,9 @@ export async function getManagedUsers(): Promise<{
       phone: string | null;
     }>(
       `SELECT id, role, username, full_name, phone FROM profiles
+       WHERE ($1 = '' OR username ILIKE '%' || $1 || '%' OR full_name ILIKE '%' || $1 || '%' OR phone ILIKE '%' || $1 || '%')
        ORDER BY username ASC`,
+      [term],
     );
 
     const users: ManagedUserRow[] = profiles.map((p) => ({
@@ -112,7 +115,7 @@ export async function createManagedUser(
   input: CreateManagedUserInput,
 ): Promise<{ success: boolean; error: string | null }> {
   try {
-    const gate = await requireSuperAdmin();
+    const gate = await requireAdminOrSuperAdmin();
     if (!gate.user) {
       return { success: false, error: gate.error };
     }
@@ -135,9 +138,14 @@ export async function createManagedUser(
       return { success: false, error: "密码至少 6 位" };
     }
 
-    const initialRole = input.initialRole ?? "user";
-    if (initialRole !== "user" && initialRole !== "admin") {
-      return { success: false, error: "无效角色" };
+    // 管理员只能创建普通用户
+    let initialRole: "user" | "admin" = "user";
+    if (gate.role === "super_admin" && input.initialRole) {
+      initialRole = input.initialRole;
+    }
+    // 管理员只能创建 user
+    if (gate.role === "admin") {
+      initialRole = "user";
     }
 
     await withTransaction(async (client) => {
@@ -204,6 +212,46 @@ export async function resetManagedUserPassword(
     return { success: true, error: null };
   } catch (e) {
     console.error("resetManagedUserPassword", e);
+    return { success: false, error: formatActionError(e) };
+  }
+}
+
+/** 删除用户账号 */
+export async function deleteManagedUser(
+  targetUserId: string,
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const gate = await requireAdminOrSuperAdmin();
+    if (!gate.user) {
+      return { success: false, error: gate.error };
+    }
+
+    if (targetUserId === gate.user.id) {
+      return { success: false, error: "不能删除自己的账号" };
+    }
+
+    const tr = await queryOne<{ role: string }>(
+      `SELECT role FROM profiles WHERE id = $1`,
+      [targetUserId],
+    );
+    if (!tr) {
+      return { success: false, error: "用户不存在" };
+    }
+    if (tr.role === "super_admin") {
+      return { success: false, error: "不能删除超级管理员账号" };
+    }
+
+    await withTransaction(async (client) => {
+      await client.query(`DELETE FROM profiles WHERE id = $1`, [targetUserId]);
+      await client.query(`DELETE FROM app_users WHERE id = $1`, [targetUserId]);
+    });
+
+    revalidatePath("/family-tree/settings/users");
+    revalidatePath("/family-tree", "layout");
+    revalidatePath("/blog", "layout");
+    return { success: true, error: null };
+  } catch (e) {
+    console.error("deleteManagedUser", e);
     return { success: false, error: formatActionError(e) };
   }
 }

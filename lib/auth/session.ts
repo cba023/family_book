@@ -97,6 +97,24 @@ export async function requireSuperAdmin(): Promise<
   return { user: ctx.user, error: null };
 }
 
+export async function requireAdminOrSuperAdmin(): Promise<
+  | { user: SessionUser; role: AppRole; error: null }
+  | { user: null; role: null; error: string }
+> {
+  const ctx = await getUserRole();
+  if (!ctx.user) {
+    return { user: null, role: null, error: ctx.error ?? "请先登录" };
+  }
+  if (!canMaintainGenealogy(ctx.role)) {
+    return {
+      user: null,
+      role: null,
+      error: "需要管理员权限才能进行此操作",
+    };
+  }
+  return { user: ctx.user, role: ctx.role as AppRole, error: null };
+}
+
 export function numId(v: unknown): number {
   if (typeof v === "number" && !Number.isNaN(v)) return v;
   if (typeof v === "string") return parseInt(v, 10);

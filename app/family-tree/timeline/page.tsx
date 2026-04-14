@@ -22,7 +22,7 @@ async function TimelineWrapper() {
 export default function TimelinePage() {
   return (
     <div className="container mx-auto py-6">
-       <Suspense fallback={<div>Loading timeline...</div>}>
+       <Suspense fallback={<div className="text-muted-foreground">正在加载时间轴...</div>}>
          <TimelineWrapper />
        </Suspense>
     </div>

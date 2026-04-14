@@ -16,10 +16,11 @@ import {
 import { Loader2 } from "lucide-react";
 
 type Props = {
+  isSuperAdmin?: boolean;
   onSuccess?: () => void;
 };
 
-export function CreateUserForm({ onSuccess }: Props = {}) {
+export function CreateUserForm({ isSuperAdmin = false, onSuccess }: Props = {}) {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [fullName, setFullName] = useState("");
@@ -117,22 +118,28 @@ export function CreateUserForm({ onSuccess }: Props = {}) {
           minLength={6}
         />
       </div>
-      <div className="space-y-2">
-        <Label>初始权限</Label>
-        <Select
-          value={initialRole}
-          onValueChange={(v) => setInitialRole(v as "user" | "admin")}
-          disabled={isPending}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="user">普通用户</SelectItem>
-            <SelectItem value="admin">管理员</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {isSuperAdmin ? (
+        <div className="space-y-2">
+          <Label>初始权限</Label>
+          <Select
+            value={initialRole}
+            onValueChange={(v) => setInitialRole(v as "user" | "admin")}
+            disabled={isPending}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="user">普通用户</SelectItem>
+              <SelectItem value="admin">管理员</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          将创建为「普通用户」角色
+        </p>
+      )}
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         {isPending ? "创建中…" : "创建账号"}

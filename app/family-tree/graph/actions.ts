@@ -61,9 +61,11 @@ export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
       for (const s of spouseRows) nameById[numId(s.id)] = String(s.name);
     }
     for (const mid of Object.keys(spouseIdsMap)) {
-      spouseNamesMap[Number(mid)] = spouseIdsMap[Number(mid)]
-        .map((sid) => nameById[sid])
-        .filter(Boolean) as string[];
+      spouseNamesMap[Number(mid)] = [...new Set(
+        spouseIdsMap[Number(mid)]
+          .map((sid) => nameById[sid])
+          .filter(Boolean)
+      )] as string[];
     }
 
     const transformedData: FamilyMemberNode[] = rows.map((item) => {

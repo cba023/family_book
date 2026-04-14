@@ -94,7 +94,9 @@ export async function fetchMembersWithBiography(): Promise<{
         for (const r of validData) {
           const mid = numId(r.id);
           const raw = r.spouse_ids;
-          const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
+          const ids = [...new Set(
+            Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : []
+          )];
           spouseNamesMap[mid] = ids.map((sid) => nameById[sid]).filter(Boolean) as string[];
         }
       }

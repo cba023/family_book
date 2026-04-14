@@ -12,7 +12,11 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-export function AddUserButton() {
+type Props = {
+  isSuperAdmin?: boolean;
+};
+
+export function AddUserButton({ isSuperAdmin = false }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -27,7 +31,10 @@ export function AddUserButton() {
         <DialogHeader>
           <DialogTitle>新建账号</DialogTitle>
         </DialogHeader>
-        <CreateUserForm onSuccess={() => setOpen(false)} />
+        <CreateUserForm
+          isSuperAdmin={isSuperAdmin}
+          onSuccess={() => setOpen(false)}
+        />
       </DialogContent>
     </Dialog>
   );
