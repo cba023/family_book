@@ -32,6 +32,7 @@ CREATE TABLE family_members (
   official_position TEXT,
   is_alive BOOLEAN NOT NULL DEFAULT TRUE,
   spouse_id BIGINT REFERENCES family_members (id) ON DELETE SET NULL,
+  spouse_ids BIGINT[] NOT NULL DEFAULT '{}',
   is_married_in BOOLEAN NOT NULL DEFAULT FALSE,
   remarks TEXT,
   birthday TEXT,

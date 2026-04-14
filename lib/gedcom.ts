@@ -16,53 +16,53 @@ interface GedcomOptions {
  */
 function generateIndividualRecord(member: FamilyMember, id: string): string {
   const lines: string[] = [];
-  
+
   // 开始个人记录
   lines.push(`0 ${id} INDI`);
-  
+
   // 姓名
   lines.push(`1 NAME ${member.name}/`);
-  
+
   // 性别
   if (member.gender) {
     lines.push(`1 SEX ${member.gender === "男" ? "M" : "F"}`);
   }
-  
+
   // 出生日期
   if (member.birthday) {
     const birthDate = formatGedcomDate(member.birthday);
     lines.push(`1 BIRT`);
     lines.push(`2 DATE ${birthDate}`);
   }
-  
+
   // 死亡日期
   if (member.death_date) {
     const deathDate = formatGedcomDate(member.death_date);
     lines.push(`1 DEAT`);
     lines.push(`2 DATE ${deathDate}`);
   }
-  
-  // 婚姻状况 (简化处理)
-  if (member.spouse_id) {
+
+  // 婚姻状况（有多配偶时标记为已婚）
+  if (member.spouse_ids && member.spouse_ids.length > 0) {
     lines.push(`1 MARR`);
   }
-  
+
   // 居住地点
   if (member.residence_place) {
     lines.push(`1 RESI`);
     lines.push(`2 PLAC ${member.residence_place}`);
   }
-  
+
   // 职业
   if (member.official_position) {
     lines.push(`1 OCCU ${member.official_position}`);
   }
-  
+
   // 备注
   if (member.remarks) {
     lines.push(`1 NOTE ${member.remarks}`);
   }
-  
+
   return lines.join("\n");
 }
 
@@ -76,25 +76,25 @@ function generateFamilyRecord(
   familyId: string
 ): string {
   const lines: string[] = [];
-  
+
   // 开始家庭记录
   lines.push(`0 ${familyId} FAM`);
-  
+
   // 丈夫
   if (husbandId) {
     lines.push(`1 HUSB @${husbandId}@`);
   }
-  
+
   // 妻子
   if (wifeId) {
     lines.push(`1 WIFE @${wifeId}@`);
   }
-  
+
   // 子女
   for (const childId of childrenIds) {
     lines.push(`1 CHIL @${childId}@`);
   }
-  
+
   return lines.join("\n");
 }
 
@@ -102,7 +102,6 @@ function generateFamilyRecord(
  * 格式化日期为 GEDCOM 格式
  */
 function formatGedcomDate(dateStr: string): string {
-  // 假设输入格式为 YYYY-MM-DD
   const parts = dateStr.split("-");
   if (parts.length === 3) {
     const [year, month, day] = parts;
@@ -129,9 +128,9 @@ export function exportToGedcom(
     version = "5.5.1",
     encoding = "UTF-8"
   } = options;
-  
+
   const lines: string[] = [];
-  
+
   // GEDCOM 头部
   lines.push(`0 HEAD`);
   lines.push(`1 GEDC`);
@@ -144,11 +143,11 @@ export function exportToGedcom(
   lines.push(`1 SUBM @SUBM@`);
   lines.push(`1 FILE ${familyName}_family.ged`);
   lines.push(`2 DATE ${new Date().toISOString().split("T")[0]}`);
-  
+
   // 提交者记录
   lines.push(`0 @SUBM@ SUBM`);
   lines.push(`1 NAME ${familyName}家族`);
-  
+
   // 个人记录
   const memberIdMap = new Map<number, string>();
   members.forEach((member, index) => {
@@ -156,14 +155,15 @@ export function exportToGedcom(
     memberIdMap.set(member.id, id);
     lines.push(generateIndividualRecord(member, `@${id}@`));
   });
-  
-  // 家庭记录
+
+  // 家庭记录（每个配偶对生成一条）
   const familyMap = new Map<string, { husband: string; wife: string; children: string[] }>();
-  
-  // 构建家庭关系
+
+  // 构建家庭关系（支持多配偶）
   members.forEach(member => {
-    if (member.spouse_id) {
-      const spouse = members.find(m => m.id === member.spouse_id);
+    const spouseIds = member.spouse_ids ?? [];
+    spouseIds.forEach(spouseId => {
+      const spouse = members.find(m => m.id === spouseId);
       if (spouse) {
         const familyKey = [member.id, spouse.id].sort((a, b) => a - b).join("-");
         if (!familyMap.has(familyKey)) {
@@ -176,29 +176,33 @@ export function exportToGedcom(
           });
         }
       }
-    }
+    });
   });
-  
+
   // 添加子女到家庭
   members.forEach(member => {
     if (member.father_id) {
       const father = members.find(m => m.id === member.father_id);
-      if (father && father.spouse_id) {
-        const familyKey = [father.id, father.spouse_id].sort((a, b) => a - b).join("-");
-        const family = familyMap.get(familyKey);
-        if (family) {
-          const childId = memberIdMap.get(member.id);
-          if (childId) {
-            family.children.push(childId);
+      if (father) {
+        const spouseIds = father.spouse_ids ?? [];
+        // 为每个配偶对添加子女
+        spouseIds.forEach(spouseId => {
+          const familyKey = [father.id, spouseId].sort((a, b) => a - b).join("-");
+          const family = familyMap.get(familyKey);
+          if (family) {
+            const childId = memberIdMap.get(member.id);
+            if (childId && !family.children.includes(childId)) {
+              family.children.push(childId);
+            }
           }
-        }
+        });
       }
     }
   });
-  
+
   // 生成家庭记录
   let familyIndex = 1;
-  familyMap.forEach((family, key) => {
+  familyMap.forEach((family, _key) => {
     const familyId = `F${String(familyIndex++).padStart(4, "0")}`;
     lines.push(generateFamilyRecord(
       family.husband,
@@ -207,10 +211,10 @@ export function exportToGedcom(
       `@${familyId}@`
     ));
   });
-  
+
   // GEDCOM 尾部
   lines.push(`0 TRLR`);
-  
+
   return lines.join("\n");
 }
 
@@ -218,24 +222,23 @@ export function exportToGedcom(
  * 解析 GEDCOM 格式数据
  */
 export function parseGedcom(gedcomContent: string): FamilyMember[] {
-  // 简化的 GEDCOM 解析
   const lines = gedcomContent.split("\n");
   const members: FamilyMember[] = [];
   const memberMap = new Map<string, Partial<FamilyMember>>();
   const familyMap = new Map<string, { husband: string; wife: string; children: string[] }>();
-  
+
   let currentId: string | null = null;
   let currentTag: string | null = null;
-  
+
   for (const line of lines) {
     if (!line.trim()) continue;
-    
+
     const match = line.match(/^(\d+)\s+(@[^@]+@|\w+)\s*(.*)$/);
     if (!match) continue;
-    
+
     const [, level, tagOrId, value] = match;
     const lvl = parseInt(level, 10);
-    
+
     if (lvl === 0) {
       if (tagOrId.startsWith("@") && value === "INDI") {
         currentId = tagOrId.replace(/@/g, "");
@@ -249,8 +252,8 @@ export function parseGedcom(gedcomContent: string): FamilyMember[] {
           gender: null,
           official_position: null,
           is_alive: true,
-          spouse_id: null,
-          spouse_name: null,
+          spouse_ids: [],
+          spouse_names: [],
           is_married_in: false,
           remarks: null,
           birthday: null,
@@ -267,8 +270,7 @@ export function parseGedcom(gedcomContent: string): FamilyMember[] {
     } else if (currentId) {
       if (memberMap.has(currentId)) {
         const member = memberMap.get(currentId)!;
-        
-        // 处理标签和值
+
         if (tagOrId === "NAME" && value) {
           member.name = value.replace(/\//g, "");
         } else if (tagOrId === "SEX" && value) {
@@ -305,34 +307,41 @@ export function parseGedcom(gedcomContent: string): FamilyMember[] {
       }
     }
   }
-  
+
   // 构建成员关系
   const idToMemberId = new Map<string, number>();
   memberMap.forEach((member, id) => {
     const memberId = members.length + 1;
     idToMemberId.set(id, memberId);
-    // 临时 ID，导入时会被数据库自增 ID 替换
     member.id = memberId;
     members.push(member as FamilyMember);
   });
-  
-  // 处理家庭关系
+
+  // 处理家庭关系（支持多配偶）
   familyMap.forEach(family => {
     const husbandId = idToMemberId.get(family.husband);
     const wifeId = idToMemberId.get(family.wife);
-    
+
     if (husbandId && wifeId) {
       const husband = members.find(m => m.id === husbandId);
       const wife = members.find(m => m.id === wifeId);
       if (husband && wife) {
-        husband.spouse_id = wifeId;
-        husband.spouse_name = wife.name;
-        wife.spouse_id = husbandId;
-        wife.spouse_name = husband.name;
+        if (!husband.spouse_ids) husband.spouse_ids = [];
+        if (!wife.spouse_ids) wife.spouse_ids = [];
+        if (!husband.spouse_names) husband.spouse_names = [];
+        if (!wife.spouse_names) wife.spouse_names = [];
+        if (!husband.spouse_ids.includes(wifeId)) {
+          husband.spouse_ids.push(wifeId);
+          husband.spouse_names.push(wife.name);
+        }
+        if (!wife.spouse_ids.includes(husbandId)) {
+          wife.spouse_ids.push(husbandId);
+          wife.spouse_names.push(husband.name);
+        }
         wife.is_married_in = true;
       }
     }
-    
+
     // 处理子女关系
     family.children.forEach(childId => {
       const childMemberId = idToMemberId.get(childId);
@@ -346,7 +355,7 @@ export function parseGedcom(gedcomContent: string): FamilyMember[] {
       }
     });
   });
-  
+
   return members;
 }
 
@@ -354,7 +363,6 @@ export function parseGedcom(gedcomContent: string): FamilyMember[] {
  * 解析 GEDCOM 日期格式
  */
 function parseGedcomDate(gedcomDate: string): string {
-  // 格式: MAR 15 2023
   const parts = gedcomDate.trim().split(/\s+/);
   if (parts.length === 3) {
     const [month, day, year] = parts;

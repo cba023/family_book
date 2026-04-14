@@ -158,8 +158,8 @@ export function GedcomImportExport({ onSuccess }: GedcomImportExportProps) {
         if (member.father_name) {
           infoItems.push(`<p style="margin: 6px 0; break-inside: avoid;"><strong>父　　亲：</strong>${member.father_name}</p>`);
         }
-        if (member.spouse_name) {
-          infoItems.push(`<p style="margin: 6px 0; break-inside: avoid;"><strong>配　　偶：</strong>${member.spouse_name}</p>`);
+        if (member.spouse_names && member.spouse_names.length > 0) {
+          infoItems.push(`<p style="margin: 6px 0; break-inside: avoid;"><strong>配　　偶：</strong>${member.spouse_names.join("、")}</p>`);
         }
         
         // 生平事迹
@@ -252,8 +252,8 @@ export function GedcomImportExport({ onSuccess }: GedcomImportExportProps) {
         if (member.father_name) {
           infoItems.push(`<p style="margin: 8px 0;"><strong>父　　亲：</strong>${member.father_name}</p>`);
         }
-        if (member.spouse_name) {
-          infoItems.push(`<p style="margin: 8px 0;"><strong>配　　偶：</strong>${member.spouse_name}</p>`);
+        if (member.spouse_names && member.spouse_names.length > 0) {
+          infoItems.push(`<p style="margin: 8px 0;"><strong>配　　偶：</strong>${member.spouse_names.join("、")}</p>`);
         }
         
         const remarksSection = member.remarks 

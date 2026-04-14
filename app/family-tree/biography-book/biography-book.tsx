@@ -108,7 +108,7 @@ const MemberPage = memo(function MemberPage({
                             配偶
                         </span>
                         <p className="text-sm text-stone-700">
-                            {member.spouse || "未记录"}
+                            {member.spouses?.join("、") || "未记录"}
                         </p>
                     </div>
                     <div className="space-y-0.5">

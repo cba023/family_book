@@ -9,6 +9,7 @@
     "start": "next start",
     "db:backup": "tsx scripts/backup.ts",
     "db:restore": "tsx scripts/restore.ts",
+    "init": "tsx lib/auto-init.ts",
     "docker:build": "docker build -t familybook:latest --target production --build-arg SERVER_ACTIONS_STRICT_ORIGIN=${SERVER_ACTIONS_STRICT_ORIGIN:-} --build-arg SERVER_ACTIONS_ALLOWED_ORIGINS=${SERVER_ACTIONS_ALLOWED_ORIGINS:-} .",
     "docker:build:amd64": "docker build --platform linux/amd64 -t familybook:amd64 --target production --build-arg SERVER_ACTIONS_STRICT_ORIGIN=${SERVER_ACTIONS_STRICT_ORIGIN:-} --build-arg SERVER_ACTIONS_ALLOWED_ORIGINS=${SERVER_ACTIONS_ALLOWED_ORIGINS:-} .",
     "docker:save": "bash scripts/docker-save-tar.sh",

@@ -13,7 +13,7 @@ export interface BiographyMember {
   birthday: string | null;
   death_date: string | null;
   is_alive: boolean;
-  spouse: string | null;
+  spouses: string[];
   official_position: string | null;
   residence_place: string | null;
   remarks: string;
@@ -70,27 +70,41 @@ export async function fetchMembersWithBiography(): Promise<{
       );
     }
 
-    const spouseIds = validData
-      .map((item) => item.spouse_id)
-      .filter((id): id is number | string => id != null)
-      .map(numId);
-
-    let spouseMap: Record<number, string> = {};
-    if (spouseIds.length > 0) {
-      const spouses = await query<{ id: number; name: string }>(
-        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
-        [spouseIds],
-      );
-      spouseMap = Object.fromEntries(
-        spouses.map((s) => [numId(s.id), String(s.name)]),
-      );
+    const memberIds = validData.map(r => numId(r.id));
+    const spouseNamesMap: Record<number, string[]> = {};
+    if (memberIds.length > 0) {
+      // 从 spouse_ids 数组获取配偶名字
+      const allSpouseIds: number[] = [];
+      for (const r of validData) {
+        const raw = r.spouse_ids;
+        if (Array.isArray(raw)) {
+          for (const v of raw) {
+            const sid = numId(v);
+            if (!isNaN(sid)) allSpouseIds.push(sid);
+          }
+        }
+      }
+      if (allSpouseIds.length > 0) {
+        const spouseRows = await query<{ id: bigint; name: string }>(
+          `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+          [[...new Set(allSpouseIds)]],
+        );
+        const nameById: Record<number, string> = {};
+        for (const s of spouseRows) nameById[numId(s.id)] = String(s.name);
+        for (const r of validData) {
+          const mid = numId(r.id);
+          const raw = r.spouse_ids;
+          const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
+          spouseNamesMap[mid] = ids.map((sid) => nameById[sid]).filter(Boolean) as string[];
+        }
+      }
     }
 
     const transformedData: BiographyMember[] = validData.map((item) => {
-      const sid = item.spouse_id != null ? numId(item.spouse_id) : null;
+      const id = numId(item.id);
       const fid = item.father_id != null ? numId(item.father_id) : null;
       return {
-        id: numId(item.id),
+        id,
         name: String(item.name),
         generation: item.generation != null ? Number(item.generation) : null,
         sibling_order:
@@ -99,7 +113,7 @@ export async function fetchMembersWithBiography(): Promise<{
         birthday: item.birthday != null ? String(item.birthday) : null,
         death_date: item.death_date != null ? String(item.death_date) : null,
         is_alive: Boolean(item.is_alive),
-        spouse: sid ? spouseMap[sid] ?? null : null,
+        spouses: spouseNamesMap[id] ?? [],
         official_position:
           item.official_position != null ? String(item.official_position) : null,
         residence_place:

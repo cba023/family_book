@@ -105,23 +105,27 @@ function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
           {nodeData.name}
         </div>
 
-        {/* 配偶信息 */}
-        {nodeData.spouse_name && nodeData.spouse_id && (
-          <div className="flex items-center justify-center gap-0.5 w-full -mt-0.5 mb-0.5">
+        {/* 配偶信息（支持多配偶） */}
+        {nodeData.spouse_names && nodeData.spouse_names.length > 0 && (
+          <div className="flex items-center justify-center gap-0.5 w-full -mt-0.5 mb-0.5 flex-wrap">
             <span className="text-[10px] text-muted-foreground/70 whitespace-nowrap select-none">配:</span>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (nodeData.onSpouseClick && nodeData.spouse_id) {
-                  nodeData.onSpouseClick(nodeData.spouse_id);
-                }
-              }}
-              className="text-xs text-blue-600 dark:text-blue-400 font-medium truncate max-w-[80%] text-center hover:underline cursor-pointer"
-              title={nodeData.spouse_name}
-            >
-              {nodeData.spouse_name}
-            </button>
+            {nodeData.spouse_names.map((name: string, idx: number) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const spouseId = (nodeData.spouse_ids as number[])?.[idx];
+                  if (nodeData.onSpouseClick && spouseId) {
+                    nodeData.onSpouseClick(spouseId);
+                  }
+                }}
+                className="text-xs text-blue-600 dark:text-blue-400 font-medium truncate max-w-[80%] text-center hover:underline cursor-pointer"
+                title={name}
+              >
+                {name}
+              </button>
+            ))}
           </div>
         )}
 

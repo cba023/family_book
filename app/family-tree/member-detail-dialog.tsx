@@ -150,7 +150,7 @@ export function MemberDetailDialog({
                       <div className="space-y-1">
                         <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">配偶</span>
                         <div className="p-2 sm:p-3 bg-stone-50 dark:bg-stone-800/50 rounded border border-stone-100 dark:border-stone-700 text-stone-800 dark:text-stone-200 font-medium text-sm sm:text-base">
-                          {(member as any).spouse_name || (member as any).spouse || "未记录"}
+                          {(member as any).spouse_names?.join("、") || "未记录"}
                         </div>
                       </div>
                     </div>
