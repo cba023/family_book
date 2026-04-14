@@ -216,6 +216,115 @@ export async function resetManagedUserPassword(
   }
 }
 
+/** 超级管理员更新用户信息（姓名、手机号、角色） */
+export async function updateManagedUser(
+  targetUserId: string,
+  input: {
+    fullName?: string;
+    phone?: string;
+    role: string;
+  },
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const gate = await requireSuperAdmin();
+    if (!gate.user) {
+      return { success: false, error: gate.error };
+    }
+
+    if (targetUserId === gate.user.id) {
+      return { success: false, error: "不能修改自己的账号" };
+    }
+
+    const tr = await queryOne<{ role: string }>(
+      `SELECT role FROM profiles WHERE id = $1`,
+      [targetUserId],
+    );
+    if (!tr) {
+      return { success: false, error: "用户不存在" };
+    }
+    if (tr.role === "super_admin") {
+      return { success: false, error: "不能修改超级管理员账号" };
+    }
+
+    if (input.role !== "admin" && input.role !== "user") {
+      return { success: false, error: "无效角色" };
+    }
+
+    const fnCheck = validateOptionalFullName(input.fullName);
+    if (!fnCheck.ok) {
+      return { success: false, error: fnCheck.error };
+    }
+    const phCheck = validateOptionalPhone(input.phone);
+    if (!phCheck.ok) {
+      return { success: false, error: phCheck.error };
+    }
+
+    await getPool().query(
+      `UPDATE profiles SET full_name = $1, phone = $2, role = $3 WHERE id = $4`,
+      [fnCheck.value, phCheck.value, input.role, targetUserId],
+    );
+
+    revalidatePath("/family-tree/settings/users");
+    revalidatePath("/family-tree", "layout");
+    revalidatePath("/blog", "layout");
+    return { success: true, error: null };
+  } catch (e) {
+    console.error("updateManagedUser", e);
+    return { success: false, error: formatActionError(e) };
+  }
+}
+
+/** 普通管理员更新用户信息（姓名、手机号，不能改角色） */
+export async function updateManagedUserProfile(
+  targetUserId: string,
+  input: {
+    fullName?: string;
+    phone?: string;
+  },
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    const gate = await requireAdminOrSuperAdmin();
+    if (!gate.user) {
+      return { success: false, error: gate.error };
+    }
+
+    if (targetUserId === gate.user.id) {
+      return { success: false, error: "不能修改自己的账号" };
+    }
+
+    const tr = await queryOne<{ role: string }>(
+      `SELECT role FROM profiles WHERE id = $1`,
+      [targetUserId],
+    );
+    if (!tr) {
+      return { success: false, error: "用户不存在" };
+    }
+    if (tr.role === "super_admin") {
+      return { success: false, error: "不能修改超级管理员账号" };
+    }
+
+    const fnCheck = validateOptionalFullName(input.fullName);
+    if (!fnCheck.ok) {
+      return { success: false, error: fnCheck.error };
+    }
+    const phCheck = validateOptionalPhone(input.phone);
+    if (!phCheck.ok) {
+      return { success: false, error: phCheck.error };
+    }
+
+    await getPool().query(
+      `UPDATE profiles SET full_name = $1, phone = $2 WHERE id = $3`,
+      [fnCheck.value, phCheck.value, targetUserId],
+    );
+
+    revalidatePath("/family-tree/settings/users");
+    return { success: true, error: null };
+  } catch (e) {
+    console.error("updateManagedUserProfile", e);
+    return { success: false, error: formatActionError(e) };
+  }
+}
+
 /** 删除用户账号 */
 export async function deleteManagedUser(
   targetUserId: string,

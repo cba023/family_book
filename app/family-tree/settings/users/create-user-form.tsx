@@ -6,13 +6,6 @@ import { createManagedUser } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 
 type Props = {
@@ -121,19 +114,32 @@ export function CreateUserForm({ isSuperAdmin = false, onSuccess }: Props = {}) 
       {isSuperAdmin ? (
         <div className="space-y-2">
           <Label>初始权限</Label>
-          <Select
-            value={initialRole}
-            onValueChange={(v) => setInitialRole(v as "user" | "admin")}
-            disabled={isPending}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="user">普通用户</SelectItem>
-              <SelectItem value="admin">管理员</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="initialRole"
+                value="user"
+                checked={initialRole === "user"}
+                onChange={() => setInitialRole("user")}
+                disabled={isPending}
+                className="accent-primary"
+              />
+              <span className="text-sm">普通用户</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="initialRole"
+                value="admin"
+                checked={initialRole === "admin"}
+                onChange={() => setInitialRole("admin")}
+                disabled={isPending}
+                className="accent-primary"
+              />
+              <span className="text-sm">管理员</span>
+            </label>
+          </div>
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
