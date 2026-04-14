@@ -9,8 +9,8 @@ import { getUserRole } from "@/lib/auth/session";
 import { LoginPrompt } from "@/components/login-prompt";
 
 export const metadata: Metadata = {
-  title: "族谱关系图 (3D) | Liu Family",
-  description: "三维视角的家族族谱关系图",
+  title: "世系图 (3D) | Liu Family",
+  description: "三维视角的家族世系图",
 };
 
 async function Graph3DLoader() {
@@ -19,7 +19,7 @@ async function Graph3DLoader() {
   if (!user) {
     return (
       <div className="w-full h-[calc(100vh-300px)] min-h-[400px] flex items-center justify-center">
-        <LoginPrompt message="登录后可查看族谱关系图" />
+        <LoginPrompt message="登录后可查看世系图" />
       </div>
     );
   }
@@ -51,7 +51,7 @@ export default async function FamilyTreeGraph3DPage() {
   return (
     <div className="container mx-auto py-6 px-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-6">
-        <h1 className="text-3xl font-bold">族谱关系图 (3D)</h1>
+        <h1 className="text-3xl font-bold">世系图 (3D)</h1>
         {user && (
           <Button variant="outline" asChild>
             <Link href="/family-tree/graph">

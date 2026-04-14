@@ -10,7 +10,7 @@ import { LoginPrompt } from "@/components/login-prompt";
 function GraphSkeleton() {
   return (
     <div className="w-full h-[calc(100vh-200px)] min-h-[500px] border rounded-lg bg-muted/20 animate-pulse flex items-center justify-center">
-      <div className="text-muted-foreground">加载族谱关系图...</div>
+      <div className="text-muted-foreground">加载世系图...</div>
     </div>
   );
 }
@@ -21,7 +21,7 @@ async function GraphLoader() {
   if (!user) {
     return (
       <div className="w-full h-[calc(100vh-300px)] min-h-[400px] flex items-center justify-center">
-        <LoginPrompt message="登录后可查看族谱关系图" />
+        <LoginPrompt message="登录后可查看世系图" />
       </div>
     );
   }
@@ -53,7 +53,7 @@ export default async function FamilyTreeGraphPage() {
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-6">
-        <h1 className="text-3xl font-bold">族谱关系图</h1>
+        <h1 className="text-3xl font-bold">世系图</h1>
         {user && (
           <Button variant="outline" asChild>
             <Link href="/family-tree/graph-3d">

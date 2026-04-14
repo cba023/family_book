@@ -11,7 +11,7 @@ export default function BlogPage() {
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">家族博客</h1>
+          <h1 className="text-3xl font-bold text-foreground">家族故事</h1>
           <p className="text-muted-foreground mt-2">
             记录家族故事，传承家族文化
           </p>

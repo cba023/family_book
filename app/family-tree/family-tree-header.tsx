@@ -14,9 +14,9 @@ export async function FamilyTreeHeader() {
   const isSuperAdmin = Boolean(user && role === "super_admin");
 
   return (
-    <header className="border-b">
+    <header className="border-b shrink-0 relative">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="font-semibold text-lg hover:opacity-80 transition-opacity">
+        <Link href="/" className="font-semibold text-lg hover:opacity-80 transition-opacity shrink-0 z-10">
           {FAMILY_SURNAME}氏族谱
         </Link>
 
@@ -26,9 +26,11 @@ export async function FamilyTreeHeader() {
           isLoggedIn={Boolean(user)}
         />
 
-        <div className="flex items-center gap-4">
-          <ThemeSwitcher />
-          <div className="hidden md:block">
+        <div className="flex items-center gap-4 shrink-0 z-10">
+          <div className="w-8 shrink-0">
+            <ThemeSwitcher />
+          </div>
+          <div className="hidden md:block shrink-0">
             <AuthButton
               user={
                 user

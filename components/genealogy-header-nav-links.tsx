@@ -8,7 +8,7 @@ type Props = {
   canMaintainData: boolean;
   /** 仅 super_admin：管理用户角色 */
   isSuperAdmin: boolean;
-  /** 当前高亮路由前缀，用于博客页样式 */
+  /** 当前高亮路由前缀，用于家族故事页样式 */
   blogActive?: boolean;
   /** 是否已登录 */
   isLoggedIn?: boolean;
@@ -24,7 +24,7 @@ export function GenealogyHeaderNavLinks({
 
   const isActive = (path: string) => {
     if (path === "/blog") {
-      return blogActive || pathname === "/blog";
+      return pathname.startsWith("/blog");
     }
     return pathname === path;
   };
@@ -36,12 +36,12 @@ export function GenealogyHeaderNavLinks({
   };
 
   return (
-    <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+    <nav className="hidden md:flex items-center justify-center gap-6 text-sm font-medium absolute left-1/2 -translate-x-1/2">
       <Link
         href="/blog"
         className={getLinkClass("/blog")}
       >
-        家族博客
+        家族故事
       </Link>
       {/* 登录用户都可以看到成员列表，但只有管理员可以编辑 */}
       {isLoggedIn && (
@@ -51,16 +51,16 @@ export function GenealogyHeaderNavLinks({
       )}
 
       <Link href="/family-tree/graph" className={getLinkClass("/family-tree/graph")}>
-        族谱视图
-      </Link>
-      <Link href="/family-tree/statistics" className={getLinkClass("/family-tree/statistics")}>
-        统计分析
+        世系图
       </Link>
       <Link href="/family-tree/biography-book" className={getLinkClass("/family-tree/biography-book")}>
         生平册
       </Link>
       <Link href="/family-tree/timeline" className={getLinkClass("/family-tree/timeline")}>
         时间轴
+      </Link>
+      <Link href="/family-tree/statistics" className={getLinkClass("/family-tree/statistics")}>
+        数据统计
       </Link>
     </nav>
   );

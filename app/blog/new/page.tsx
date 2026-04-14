@@ -111,7 +111,7 @@ export default function NewBlogPostPage() {
           <Link href="/blog">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              返回博客
+              返回家族故事
             </Button>
           </Link>
         </div>
@@ -130,7 +130,7 @@ export default function NewBlogPostPage() {
         <Link href="/blog">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            返回博客
+            返回家族故事
           </Button>
         </Link>
         <div className="flex gap-2 lg:hidden">
@@ -198,7 +198,7 @@ export default function NewBlogPostPage() {
                     id="tags"
                     value={tags}
                     onChange={(e) => setTags(e.target.value)}
-                    placeholder="家族历史, 文化传承, 故事（用逗号分隔）"
+                    placeholder="家族历史, 文化传承, 家族故事（用逗号分隔）"
                   />
                 </div>
 

@@ -9,7 +9,7 @@
 - **框架**: Next.js 16 (App Router, RSC)
 - **后端/数据库**: Supabase (PostgreSQL + Auth + Realtime)
 - **UI**: shadcn/ui (new-york 风格) + Tailwind CSS + lucide-react 图标
-- **可视化**: @xyflow/react 实现族谱关系图
+- **可视化**: @xyflow/react 实现世系图
 - **主题**: next-themes 明暗模式
 
 ## Supabase 客户端规范（必读）

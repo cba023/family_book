@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  基于 Next.js（App Router）与 PostgreSQL 的全中文家族族谱与博客应用，支持 Docker 部署与首次启动向导。
+  基于 Next.js（App Router）与 PostgreSQL 的全中文家族族谱与家族故事应用，支持 Docker 部署与首次启动向导。
 </p>
 
 ## ✨ 项目亮点
@@ -41,7 +41,7 @@
 
 2D 族谱图、3D 关系网、统计仪表盘、时间轴、传记书模式等。
 
-### 3. 博客 (`/blog`)
+### 3. 家族故事 (`/blog`)
 
 文章发布与浏览（含 hash 链接）。
 
@@ -224,7 +224,7 @@ docker run -d --name familybook-app -p 3000:3000 \
 ## 📂 项目结构（节选）
 
 ```
-├── app/                    # App Router：族谱、博客、认证、/setup 向导
+├── app/                    # App Router：族谱、家族故事、认证、/setup 向导
 ├── components/
 ├── docker/postgres/        # 初始化 SQL（init.sql）
 ├── lib/                    # pg、认证、运行时配置等

@@ -97,7 +97,7 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
         <Link href="/blog">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="w-4 h-4 mr-2" />
-            返回博客列表
+            返回家族故事列表
           </Button>
         </Link>
       </div>

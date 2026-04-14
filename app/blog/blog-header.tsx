@@ -14,20 +14,19 @@ export async function BlogHeader() {
   const isSuperAdmin = Boolean(user && role === "super_admin");
 
   return (
-    <header className="border-b">
+    <header className="border-b shrink-0 relative">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="font-semibold text-lg hover:opacity-80 transition-opacity">
+        <Link href="/" className="font-semibold text-lg hover:opacity-80 transition-opacity shrink-0 z-10">
           {FAMILY_SURNAME}氏族谱
         </Link>
 
         <GenealogyHeaderNavLinks
           canMaintainData={canMaintain}
           isSuperAdmin={isSuperAdmin}
-          blogActive={true}
           isLoggedIn={Boolean(user)}
         />
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 shrink-0 z-10">
           <ThemeSwitcher />
           <div className="hidden md:block">
             <AuthButton

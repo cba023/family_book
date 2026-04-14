@@ -109,7 +109,7 @@ revalidatePath("/family-tree", "layout");
 - 详情弹窗复用 `MemberDetailDialog`.
 
 ### 统计与分析 (`app/family-tree/statistics/`)
-- 基于 `recharts` 实现的家族数据仪表盘。
+- 基于 `recharts` 实现的数据统计仪表盘。
 - **可视化统计**:
     - **数据概览**: 总人数、男性比例、在世人数、世代总数。
     - **性别/状态比例**: 饼图展示家族成员性别分布及在世与已故比例。

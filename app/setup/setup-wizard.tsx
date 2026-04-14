@@ -168,7 +168,7 @@ export function SetupWizard({
               </Alert>
             ) : null}
             <Button className="w-full" onClick={() => router.push("/blog")}>
-              进入博客首页
+              进入家族故事首页
             </Button>
           </CardContent>
         </Card>

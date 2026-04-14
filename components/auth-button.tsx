@@ -64,7 +64,7 @@ export function AuthButton({ user, profile }: AuthButtonProps) {
   const accountLabel = username || user.email?.split("@")[0] || user.id.slice(0, 8);
 
   return (
-    <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 w-full md:w-auto">
+    <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-4 shrink-0">
       <span className="text-xs md:text-sm font-medium truncate max-w-[220px] md:max-w-none text-muted-foreground">
         {accountLabel}
         {showRoleBadge ? (

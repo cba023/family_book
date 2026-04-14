@@ -4,7 +4,7 @@ import { getUserRole } from "@/lib/auth/session";
 import { LoginPrompt } from "@/components/login-prompt";
 
 export const metadata = {
-  title: "家族统计分析",
+  title: "数据统计",
   description: "家族成员数据统计仪表盘",
 };
 
@@ -26,7 +26,7 @@ export default function StatisticsPage() {
   return (
     <div className="container mx-auto py-8 px-4 space-y-6">
       <div className="flex flex-col gap-2 mb-6">
-        <h1 className="text-3xl font-bold">家族数据统计</h1>
+        <h1 className="text-3xl font-bold">数据统计</h1>
         <p className="text-muted-foreground">
           家族成员数据分析仪表盘
         </p>

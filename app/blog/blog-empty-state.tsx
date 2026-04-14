@@ -25,7 +25,7 @@ export function BlogEmptyState({ isLoggedIn }: BlogEmptyStateProps) {
     return (
       <Card className="text-center py-16">
         <CardContent>
-          <p className="text-muted-foreground mb-4">还没有博客文章</p>
+          <p className="text-muted-foreground mb-4">还没有家族故事文章</p>
           <Link href="/blog/new">
             <Button>
               <Plus className="w-4 h-4 mr-2" />
@@ -45,7 +45,7 @@ export function BlogEmptyState({ isLoggedIn }: BlogEmptyStateProps) {
             <Lock className="w-6 h-6 text-muted-foreground" />
           </div>
           <div className="space-y-1">
-            <p className="text-muted-foreground">还没有博客文章</p>
+            <p className="text-muted-foreground">还没有家族故事文章</p>
             <p className="text-xs text-muted-foreground/70">登录后可发布文章</p>
           </div>
           <Button onClick={() => setLoginOpen(true)} className="gap-2">

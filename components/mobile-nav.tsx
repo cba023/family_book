@@ -48,7 +48,7 @@ export function MobileNav({
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem asChild>
           <Link href="/blog" className={getLinkClass("/blog")}>
-            家族博客
+            家族故事
           </Link>
         </DropdownMenuItem>
         {/* 登录用户都可以看到成员列表 */}
@@ -61,12 +61,7 @@ export function MobileNav({
         )}
         <DropdownMenuItem asChild>
           <Link href="/family-tree/graph" className={getLinkClass("/family-tree/graph")}>
-            族谱视图
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/family-tree/statistics" className={getLinkClass("/family-tree/statistics")}>
-            统计分析
+            世系图
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
@@ -77,6 +72,11 @@ export function MobileNav({
         <DropdownMenuItem asChild>
           <Link href="/family-tree/timeline" className={getLinkClass("/family-tree/timeline")}>
             时间轴
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/family-tree/statistics" className={getLinkClass("/family-tree/statistics")}>
+            统计分析
           </Link>
         </DropdownMenuItem>
 
