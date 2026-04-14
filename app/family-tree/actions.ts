@@ -509,8 +509,8 @@ export async function updateFamilyMember(
     await getPool().query(
       `UPDATE family_members SET
         name = $1, generation = $2, sibling_order = $3, father_id = $4,
-        gender = $5, official_position = $6, is_alive = $7, spouse_id = NULL,
-        is_married_in = $8, remarks = $9, birthday = $10, death_date = $11,
+        gender = $5, official_position = $6, is_alive = $7, is_married_in = $8,
+        remarks = $9, birthday = $10, death_date = $11,
         residence_place = $12, updated_at = NOW()
       WHERE id = $13`,
       [
@@ -521,7 +521,8 @@ export async function updateFamilyMember(
         input.gender ?? null,
         input.official_position ?? null,
         alive,
-        Boolean(input.is_married_in),
+        // 根据 spouse_ids 是否为空来判断是否已婚
+        Boolean(input.spouse_ids && input.spouse_ids.length > 0),
         input.remarks ?? null,
         input.birthday ?? null,
         input.death_date ?? null,
