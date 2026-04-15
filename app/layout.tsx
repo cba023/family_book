@@ -5,7 +5,6 @@ import { Analytics } from "@vercel/analytics/next";
 import NextTopLoader from "nextjs-toploader";
 import "./globals.css";
 import { FAMILY_SURNAME } from "@/lib/utils";
-import { SetupGate } from "@/components/setup-gate";
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -45,7 +44,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SetupGate>{children}</SetupGate>
+          {children}
         </ThemeProvider>
         <Analytics />
       </body>

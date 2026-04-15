@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { AuthButton } from "@/components/auth-button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { MobileNav } from "@/components/mobile-nav";
 import { GenealogyHeaderNavLinks } from "@/components/genealogy-header-nav-links";
 import { FAMILY_SURNAME } from "@/lib/utils";
 import { getUserRole } from "@/lib/auth/session";
@@ -15,51 +14,39 @@ export async function FamilyTreeHeader() {
 
   return (
     <header className="border-b shrink-0 relative">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="font-semibold text-lg hover:opacity-80 transition-opacity shrink-0 z-10">
+      <div className="mx-auto flex w-full max-w-6xl min-w-0 flex-nowrap items-center gap-2 sm:gap-3 px-4 md:px-6 py-2 min-h-14">
+        <Link
+          href="/"
+          className="shrink-0 font-semibold text-sm sm:text-base md:text-lg hover:opacity-80 transition-opacity max-w-[9rem] sm:max-w-none truncate"
+        >
           {FAMILY_SURNAME}氏族谱
         </Link>
 
-        <GenealogyHeaderNavLinks
-          canMaintainData={canMaintain}
-          isSuperAdmin={isSuperAdmin}
-          isLoggedIn={Boolean(user)}
-        />
+        <div className="flex-1 min-w-0 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] flex justify-center">
+          <GenealogyHeaderNavLinks
+            canMaintainData={canMaintain}
+            isSuperAdmin={isSuperAdmin}
+            isLoggedIn={Boolean(user)}
+          />
+        </div>
 
-        <div className="flex items-center gap-4 shrink-0 z-10">
-          <div className="w-8 shrink-0">
+        <div className="shrink-0 flex items-center gap-1 sm:gap-2">
+          <div className="w-8 shrink-0 flex justify-center">
             <ThemeSwitcher />
           </div>
-          <div className="hidden md:block shrink-0">
-            <AuthButton
-              user={
-                user
-                  ? {
-                      id: user.id,
-                      email: username
-                        ? syntheticEmailFromUsername(username)
-                        : null,
-                    }
-                  : null
-              }
-              profile={user ? { role, username } : null}
-            />
-          </div>
-          <MobileNav isAdmin={canMaintain} isSuperAdmin={isSuperAdmin} isLoggedIn={Boolean(user)}>
-            <AuthButton
-              user={
-                user
-                  ? {
-                      id: user.id,
-                      email: username
-                        ? syntheticEmailFromUsername(username)
-                        : null,
-                    }
-                  : null
-              }
-              profile={user ? { role, username } : null}
-            />
-          </MobileNav>
+          <AuthButton
+            user={
+              user
+                ? {
+                    id: user.id,
+                    email: username
+                      ? syntheticEmailFromUsername(username)
+                      : null,
+                  }
+                : null
+            }
+            profile={user ? { role, username } : null}
+          />
         </div>
       </div>
     </header>

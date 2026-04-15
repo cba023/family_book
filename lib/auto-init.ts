@@ -98,7 +98,7 @@ export async function autoInitialize(): Promise<{
 
     let message = "数据库已就绪";
     if (userCount === 0) {
-      const adminUsername = process.env.DEFAULT_ADMIN_USERNAME || "admin";
+      const adminUsername = process.env.DEFAULT_ADMIN_USERNAME || "chief_admin";
       const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123456";
       const adminFullName = process.env.DEFAULT_ADMIN_FULL_NAME || "系统管理员";
       const adminPhone = process.env.DEFAULT_ADMIN_PHONE || "";

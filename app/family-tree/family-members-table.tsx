@@ -94,6 +94,8 @@ export function FamilyMembersTable({
     remarks: "",
     birthday: "",
     death_date: "",
+    birthdayUnknown: false,
+    deathUnknown: false,
     residence_place: "",
   });
 
@@ -257,6 +259,8 @@ export function FamilyMembersTable({
       remarks: "",
       birthday: "",
       death_date: "",
+      birthdayUnknown: false,
+      deathUnknown: false,
       residence_place: "",
     });
     setEditingMember(null);
@@ -284,6 +288,8 @@ export function FamilyMembersTable({
       remarks: member.remarks ?? "",
       birthday: member.birthday ?? "",
       death_date: member.death_date ?? "",
+      birthdayUnknown: !member.birthday,
+      deathUnknown: !member.is_alive && !member.death_date,
       residence_place: member.residence_place ?? "",
     });
     setIsDialogOpen(true);
@@ -336,8 +342,12 @@ export function FamilyMembersTable({
       spouse_ids: [...new Set(formData.spouse_ids.filter(id => !isNaN(id) && id > 0))],
       is_married_in: formData.is_married_in,
       remarks: formData.remarks || null,
-      birthday: formData.birthday || null,
-      death_date: (!formData.is_alive && formData.death_date) ? formData.death_date : null,
+      birthday: formData.birthdayUnknown ? null : formData.birthday || null,
+      death_date: formData.is_alive
+        ? null
+        : formData.deathUnknown
+          ? null
+          : formData.death_date || null,
       residence_place: formData.residence_place || null,
     };
 
@@ -601,19 +611,43 @@ export function FamilyMembersTable({
                 )}
 
                 {/* 生日 */}
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="birthday" className="text-right">
+                <div className="grid grid-cols-4 items-start gap-4 sm:items-center">
+                  <Label htmlFor="birthday" className="text-right pt-2 sm:pt-0">
                     生日
                   </Label>
-                  <Input
-                    id="birthday"
-                    type="date"
-                    value={formData.birthday}
-                    onChange={(e) =>
-                      setFormData({ ...formData, birthday: e.target.value })
-                    }
-                    className="col-span-3"
-                  />
+                  <div className="col-span-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+                    <Input
+                      id="birthday"
+                      type="date"
+                      value={formData.birthday}
+                      disabled={formData.birthdayUnknown}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          birthday: e.target.value,
+                          birthdayUnknown: false,
+                        })
+                      }
+                      className="w-full sm:max-w-[200px] sm:flex-1 min-w-0"
+                    />
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Checkbox
+                        id="birthday_unknown"
+                        checked={formData.birthdayUnknown}
+                        onCheckedChange={(checked) => {
+                          const on = checked === true;
+                          setFormData({
+                            ...formData,
+                            birthdayUnknown: on,
+                            birthday: on ? "" : formData.birthday,
+                          });
+                        }}
+                      />
+                      <Label htmlFor="birthday_unknown" className="font-normal cursor-pointer">
+                        不详
+                      </Label>
+                    </div>
+                  </div>
                 </div>
 
                 {/* 居住地 - 仅男性或非嫁入女性显示 */}
@@ -660,12 +694,24 @@ export function FamilyMembersTable({
                     <Checkbox
                       id="is_alive"
                       checked={formData.is_alive}
-                      onCheckedChange={(checked) =>
-                        setFormData({
-                          ...formData,
-                          is_alive: checked as boolean,
-                        })
-                      }
+                      onCheckedChange={(checked) => {
+                        const alive = checked === true;
+                        setFormData((prev) => {
+                          if (alive) {
+                            return {
+                              ...prev,
+                              is_alive: true,
+                              death_date: "",
+                              deathUnknown: false,
+                            };
+                          }
+                          return {
+                            ...prev,
+                            is_alive: false,
+                            deathUnknown: !prev.death_date,
+                          };
+                        });
+                      }}
                     />
                     <Label htmlFor="is_alive" className="font-normal">
                       在世
@@ -675,19 +721,43 @@ export function FamilyMembersTable({
 
                 {/* 卒年 (仅去世可选) */}
                 {!formData.is_alive && (
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="death_date" className="text-right">
+                  <div className="grid grid-cols-4 items-start gap-4 sm:items-center">
+                    <Label htmlFor="death_date" className="text-right pt-2 sm:pt-0">
                       卒年
                     </Label>
-                    <Input
-                      id="death_date"
-                      type="date"
-                      value={formData.death_date}
-                      onChange={(e) =>
-                        setFormData({ ...formData, death_date: e.target.value })
-                      }
-                      className="col-span-3"
-                    />
+                    <div className="col-span-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+                      <Input
+                        id="death_date"
+                        type="date"
+                        value={formData.death_date}
+                        disabled={formData.deathUnknown}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            death_date: e.target.value,
+                            deathUnknown: false,
+                          })
+                        }
+                        className="w-full sm:max-w-[200px] sm:flex-1 min-w-0"
+                      />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Checkbox
+                          id="death_unknown"
+                          checked={formData.deathUnknown}
+                          onCheckedChange={(checked) => {
+                            const on = checked === true;
+                            setFormData({
+                              ...formData,
+                              deathUnknown: on,
+                              death_date: on ? "" : formData.death_date,
+                            });
+                          }}
+                        />
+                        <Label htmlFor="death_unknown" className="font-normal cursor-pointer">
+                          不详
+                        </Label>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -997,15 +1067,17 @@ export function FamilyMembersTable({
                           const [y, m, d] = member.birthday.split("-");
                           return `${y}年${m}月${d}日`;
                         })()
-                      : "-"}
+                      : "不详"}
                   </TableCell>
                   <TableCell>
-                    {member.death_date
-                      ? (() => {
-                          const [y, m, d] = member.death_date.split("-");
-                          return `${y}年${m}月${d}日`;
-                        })()
-                      : "-"}
+                    {member.is_alive
+                      ? "-"
+                      : member.death_date
+                        ? (() => {
+                            const [y, m, d] = member.death_date.split("-");
+                            return `${y}年${m}月${d}日`;
+                          })()
+                        : "不详"}
                   </TableCell>
                   <TableCell>{member.residence_place ?? "-"}</TableCell>
                   <TableCell>{member.official_position ?? "-"}</TableCell>

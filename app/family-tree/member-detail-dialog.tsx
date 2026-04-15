@@ -39,7 +39,7 @@ export function MemberDetailDialog({
   if (!member) return null;
 
   const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return "-";
+    if (!dateStr) return "不详";
     const [y, m, d] = dateStr.split("-");
     return `${y}年${m}月${d}日`;
   };
@@ -197,7 +197,9 @@ export function MemberDetailDialog({
                       </div>
                       <div className="space-y-1">
                         <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">卒年</span>
-                        <p className="text-base sm:text-lg text-stone-700 dark:text-stone-300">{formatDate(member.death_date)}</p>
+                        <p className="text-base sm:text-lg text-stone-700 dark:text-stone-300">
+                          {member.is_alive ? "—" : formatDate(member.death_date)}
+                        </p>
                       </div>
                     </div>
 

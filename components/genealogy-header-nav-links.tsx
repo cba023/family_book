@@ -36,30 +36,35 @@ export function GenealogyHeaderNavLinks({
   };
 
   return (
-    <nav className="hidden md:flex items-center justify-center gap-6 text-sm font-medium absolute left-1/2 -translate-x-1/2">
-      <Link
-        href="/blog"
-        className={getLinkClass("/blog")}
-      >
+    <nav
+      aria-label="族谱主导航"
+      className="inline-flex flex-nowrap items-center justify-center gap-x-2 sm:gap-x-3 lg:gap-x-4 text-xs sm:text-sm font-medium py-1"
+    >
+      <Link href="/blog" className={`${getLinkClass("/blog")} shrink-0`}>
         家族故事
       </Link>
-      {/* 登录用户都可以看到成员列表，但只有管理员可以编辑 */}
       {isLoggedIn && (
-        <Link href="/family-tree" className={getLinkClass("/family-tree")}>
+        <Link href="/family-tree" className={`${getLinkClass("/family-tree")} shrink-0`}>
           成员列表
         </Link>
       )}
 
-      <Link href="/family-tree/graph" className={getLinkClass("/family-tree/graph")}>
+      <Link href="/family-tree/graph" className={`${getLinkClass("/family-tree/graph")} shrink-0`}>
         世系图
       </Link>
-      <Link href="/family-tree/biography-book" className={getLinkClass("/family-tree/biography-book")}>
+      <Link
+        href="/family-tree/biography-book"
+        className={`${getLinkClass("/family-tree/biography-book")} shrink-0`}
+      >
         生平册
       </Link>
-      <Link href="/family-tree/timeline" className={getLinkClass("/family-tree/timeline")}>
+      <Link href="/family-tree/timeline" className={`${getLinkClass("/family-tree/timeline")} shrink-0`}>
         时间轴
       </Link>
-      <Link href="/family-tree/statistics" className={getLinkClass("/family-tree/statistics")}>
+      <Link
+        href="/family-tree/statistics"
+        className={`${getLinkClass("/family-tree/statistics")} shrink-0`}
+      >
         数据统计
       </Link>
     </nav>

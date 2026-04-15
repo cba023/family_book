@@ -4,7 +4,7 @@ import { FamilyTreeHeader } from "./family-tree-header";
 function FamilyTreeHeaderFallback() {
   return (
     <header className="border-b">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 md:px-6">
         <div className="h-6 w-28 bg-muted animate-pulse rounded" />
         <div className="hidden md:flex items-center gap-6">
           <div className="h-4 w-16 bg-muted animate-pulse rounded" />

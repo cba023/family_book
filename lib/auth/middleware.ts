@@ -59,8 +59,7 @@ export async function updateSession(request: NextRequest) {
     !isPublicPath &&
     !user &&
     !path.startsWith("/noauth") &&
-    !path.startsWith("/auth") &&
-    !path.startsWith("/setup")
+    !path.startsWith("/auth")
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
