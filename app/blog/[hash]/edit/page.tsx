@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Save, Eye, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Save, Eye, Image as ImageIcon, X } from "lucide-react";
 import MarkdownContent from "@/components/markdown-content";
 import { ImageUpload } from "@/components/image-upload";
 import {
@@ -138,12 +138,20 @@ export default function EditBlogPostPage({ params }: EditBlogPostPageProps) {
                 <div>
                   <Label>封面图片</Label>
                   {coverImage && (
-                    <div className="mb-2 rounded-lg border overflow-hidden">
+                    <div className="mb-2 rounded-lg border overflow-hidden relative group">
                       <img
                         src={coverImage}
                         alt="封面预览"
                         className="w-full h-32 object-cover"
                       />
+                      <button
+                        type="button"
+                        onClick={() => setCoverImage("")}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                        title="删除封面图片"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   )}
                   <ImageUpload

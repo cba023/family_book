@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile } from "fs/promises";
-import { mkdir } from "fs/promises";
 import path from "path";
-import { existsSync } from "fs";
 
-// 确保上传目录存在
-const uploadDir = path.join(process.cwd(), "public", "uploads");
+const SEAWEEDFS_URL = process.env.SEAWEEDFS_URL || "http://192.168.1.8:18888";
 
 export async function POST(request: NextRequest) {
   try {
-    // 确保上传目录存在
-    if (!existsSync(uploadDir)) {
-      await mkdir(uploadDir, { recursive: true });
-    }
-
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
@@ -52,12 +43,26 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // 保存文件
-    const filepath = path.join(uploadDir, filename);
-    await writeFile(filepath, buffer);
+    // 上传到 SeaweedFS
+    const seaweedFormData = new FormData();
+    const blob = new Blob([buffer], { type: file.type });
+    seaweedFormData.append("file", blob, filename);
 
-    // 返回可访问的 URL
-    const url = `/uploads/${filename}`;
+    const seaweedResponse = await fetch(`${SEAWEEDFS_URL}/images/${filename}`, {
+      method: "POST",
+      body: seaweedFormData,
+    });
+
+    if (!seaweedResponse.ok) {
+      console.error("SeaweedFS upload failed:", await seaweedResponse.text());
+      return NextResponse.json(
+        { error: "上传失败" },
+        { status: 500 }
+      );
+    }
+
+    // 返回 SeaweedFS 的 URL
+    const url = `${SEAWEEDFS_URL}/images/${filename}`;
 
     return NextResponse.json({
       success: true,

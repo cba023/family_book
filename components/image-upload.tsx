@@ -3,7 +3,7 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Upload, Image as ImageIcon, X, Link as LinkIcon } from "lucide-react";
+import { Upload, Image as ImageIcon, Link as LinkIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ImageUploadProps {
@@ -15,16 +15,11 @@ export function ImageUpload({ onImageSelect, className }: ImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [imageUrl, setImageUrl] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    // 显示预览
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl(objectUrl);
 
     setIsUploading(true);
     setUploadProgress(0);
@@ -45,12 +40,10 @@ export function ImageUpload({ onImageSelect, className }: ImageUploadProps) {
         setImageUrl(result.url);
       } else {
         alert(result.error || "上传失败");
-        setPreviewUrl(null);
       }
     } catch (error) {
       console.error("Upload error:", error);
       alert("上传失败");
-      setPreviewUrl(null);
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -60,37 +53,12 @@ export function ImageUpload({ onImageSelect, className }: ImageUploadProps) {
   const handleUrlSubmit = () => {
     if (imageUrl.trim()) {
       onImageSelect(imageUrl.trim());
-      setPreviewUrl(imageUrl.trim());
-    }
-  };
-
-  const clearPreview = () => {
-    setPreviewUrl(null);
-    setImageUrl("");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      setImageUrl(imageUrl.trim());
     }
   };
 
   return (
     <div className={cn("space-y-4", className)}>
-      {/* 预览区域 */}
-      {previewUrl && (
-        <div className="relative rounded-lg border overflow-hidden">
-          <img
-            src={previewUrl}
-            alt="Preview"
-            className="w-full h-48 object-contain bg-muted"
-          />
-          <button
-            onClick={clearPreview}
-            className="absolute top-2 right-2 p-1 bg-background/80 rounded-full hover:bg-background"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
       {/* 上传按钮 */}
       <div className="flex gap-2">
         <input

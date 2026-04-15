@@ -65,6 +65,15 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    const seaweedfsUrl = process.env.SEAWEEDFS_URL || 'http://192.168.1.8:18888';
+    return [
+      {
+        source: '/uploads/:path*',
+        destination: `${seaweedfsUrl}/images/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
