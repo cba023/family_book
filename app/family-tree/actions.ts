@@ -9,6 +9,7 @@ import PDFDocument from "pdfkit";
 import { FAMILY_SURNAME } from "@/lib/utils";
 import { normalizedIsMarriedIn } from "@/lib/family-member-married-in";
 import { dedupeSpouseIdsPreserveOrder } from "@/lib/family-member-spouse-ids";
+import { optionalTrunc, remarksToPlainText } from "@/lib/remarks-plain-text";
 import type { PoolClient } from "pg";
 
 export interface FamilyMember {
@@ -769,10 +770,18 @@ export async function exportFamilyToPDF(): Promise<{
       return { success: false, error: "没有可导出的成员数据" };
     }
 
-    // 使用系统字体或内置字体
+
+    // 密排：目标约每页 35～42 条（单行名录 + 小字号）
+    const M = 28;
+    const PAGE_H = 841.89;
+    const PAGE_W = 595.28;
+    const CONTENT_W = PAGE_W - M * 2;
+    /** 名录区每条基线间距（约 770/19 ≈ 40 行/页） */
+    const ROSTER_BASE_SKIP = 19;
+
     const doc = new PDFDocument({
       size: "A4",
-      margin: 50,
+      margin: M,
       info: {
         Title: `${FAMILY_SURNAME}氏族谱`,
         Author: "Family Book",
@@ -785,111 +794,104 @@ export async function exportFamilyToPDF(): Promise<{
     // 封面
     doc
       .fillColor("#8B4513")
-      .fontSize(36)
+      .fontSize(28)
       .font("Helvetica-Bold")
-      .text(`${FAMILY_SURNAME}氏族谱`, 0, 200, { align: "center" })
-      .moveDown();
+      .text(`${FAMILY_SURNAME}氏族谱`, 0, 200, { align: "center" });
 
     doc
       .fillColor("#666")
-      .fontSize(14)
+      .fontSize(10)
       .font("Helvetica")
       .text(`共收录 ${members.length} 位族人`, { align: "center" })
-      .moveDown(2);
+      .moveDown(0.5);
 
     doc
       .fillColor("#999")
-      .fontSize(12)
+      .fontSize(8.5)
       .text(`导出时间：${new Date().toLocaleDateString("zh-CN")}`, { align: "center" })
-      .moveDown(4);
+      .moveDown(0.5);
 
-    // 目录页
+    doc
+      .fontSize(8)
+      .fillColor("#888")
+      .text("正文为族人一览（密排）；有则显示生平摘要，缺项不列。", {
+        align: "center",
+      })
+      .moveDown(1.5);
+
+    // —— 族人一览（每人一行，约三四十人/页）——
     doc.addPage();
     doc
       .fillColor("#333")
-      .fontSize(24)
+      .fontSize(15)
       .font("Helvetica-Bold")
-      .text("目  录", 50, 50)
-      .moveDown();
+      .text("族人一览", M, M);
 
     doc
-      .fontSize(12)
+      .fontSize(7.5)
       .font("Helvetica")
-      .fillColor("#333");
-
-    let yPos = 100;
-    members.forEach((member, index) => {
-      doc.text(
-        `${index + 1}. ${member.name}  (第${member.generation || "?"}世  ${member.gender || ""})`,
-        50,
-        yPos
+      .fillColor("#666")
+      .text(
+        "序号、姓名及已有信息（性别、世、行、父母、配偶、生卒、居、职、生平摘要；无则不显示）",
+        M,
+        M + 18,
+        { width: CONTENT_W },
       );
-      yPos += 22;
-      if (yPos > 750) {
+
+    let yPos = M + 30;
+    doc.fillColor("#222").font("Helvetica");
+
+    members.forEach((member, index) => {
+      const mid = numId(member.id);
+      const nm =
+        optionalTrunc(member.name, 18) ??
+        (String(member.id ?? "").trim() !== "" ? `ID${member.id}` : "未命名");
+      const parts: string[] = [`${index + 1}.`, nm];
+      const g = optionalTrunc(member.gender, 2);
+      if (g) parts.push(g);
+      if (member.generation != null && String(member.generation).trim() !== "") {
+        parts.push(`第${member.generation}世`);
+      }
+      if (
+        member.sibling_order != null &&
+        String(member.sibling_order).trim() !== ""
+      ) {
+        parts.push(`行${member.sibling_order}`);
+      }
+      const father = optionalTrunc(member.father_name, 12);
+      if (father) parts.push(`父:${father}`);
+      const spouses = (spouseMap[mid] || []).join("、");
+      const sp = optionalTrunc(spouses, 20);
+      if (sp) parts.push(`配:${sp}`);
+      const birth = optionalTrunc(member.birthday, 14);
+      if (birth) parts.push(`生:${birth}`);
+      if (!member.is_alive) {
+        const d = optionalTrunc(member.death_date, 14);
+        if (d) parts.push(`卒:${d}`);
+      }
+      const place = optionalTrunc(member.residence_place, 14);
+      if (place) parts.push(`居:${place}`);
+      const job = optionalTrunc(member.official_position, 12);
+      if (job) parts.push(`职:${job}`);
+      const life = remarksToPlainText(
+        (member as { remarks?: string | null }).remarks,
+      );
+      const lifeShort = optionalTrunc(life.replace(/\n/g, " "), 56);
+      if (lifeShort) parts.push(`事:${lifeShort}`);
+
+      const line = parts.filter(Boolean).join("　");
+
+      doc.fontSize(7.5);
+      const blockH = Math.max(
+        ROSTER_BASE_SKIP - 2,
+        doc.heightOfString(line, { width: CONTENT_W, lineGap: 0 }),
+      );
+      if (yPos + blockH > PAGE_H - M - 6) {
         doc.addPage();
-        yPos = 50;
+        yPos = M + 6;
       }
-    });
-
-    // 成员详情页
-    members.forEach((member) => {
-      doc.addPage();
-
-      doc
-        .fillColor("#8B4513")
-        .fontSize(20)
-        .font("Helvetica-Bold")
-        .text(member.name, 50, 50);
-
-      doc
-        .fontSize(10)
-        .font("Helvetica")
-        .fillColor("#666");
-
-      const deathInfo = member.is_alive ? "" : ` - ${member.death_date || "不详"}`;
-      const info = [
-        `世    代：第 ${member.generation || "?"} 世`,
-        `排    行：第 ${member.sibling_order || "?"} 位`,
-        `性    别：${member.gender || "不详"}`,
-        `生    卒：${member.birthday || "不详"}${deathInfo}`,
-        `居住地：${member.residence_place || "不详"}`,
-        `职    业：${member.official_position || "不详"}`,
-        `父    亲：${member.father_name || "不详"}`,
-        `配    偶：${(spouseMap[member.id] || []).join("、") || "不详"}`,
-      ];
-
-      let infoY = 90;
-      info.forEach((line) => {
-        doc.text(line, 50, infoY);
-        infoY += 18;
-      });
-
-      if (member.remarks) {
-        doc
-          .fillColor("#333")
-          .fontSize(12)
-          .font("Helvetica-Bold")
-          .text("生平事迹", 50, infoY + 20);
-
-        doc
-          .fontSize(10)
-          .font("Helvetica")
-          .fillColor("#555")
-          .text(member.remarks, 50, infoY + 45, {
-            width: 495,
-            align: "justify",
-          });
-      }
-
-      doc
-        .fillColor("#999")
-        .fontSize(8)
-        .text(
-          `${FAMILY_SURNAME}氏族谱 - ${member.name}`,
-          50,
-          780,
-          { align: "center" }
-        );
+      doc.text(line, M, yPos, { width: CONTENT_W, lineGap: 0 });
+      yPos += blockH + 1.5;
     });
 
     doc.end();
