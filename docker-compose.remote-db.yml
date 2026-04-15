@@ -1,0 +1,33 @@
+# 仅运行应用，连接局域网/远程 PostgreSQL（不启动 compose 内的 postgres 服务）
+# 用法示例：
+#   DATABASE_URL=postgresql://postgres:postgres@192.168.1.8:33213/postgres \
+#   AUTH_SECRET=你的至少16位随机串 \
+#   docker compose -f docker-compose.remote-db.yml up -d
+#
+# 或先 export DATABASE_URL AUTH_SECRET 再执行上述命令。
+
+services:
+  app:
+    image: familybook:latest
+    container_name: familybook-app
+    ports:
+      - "3000:3000"
+    volumes:
+      - familybook-data:/app/data
+      - ./backups:/app/backups
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_FAMILY_SURNAME=${NEXT_PUBLIC_FAMILY_SURNAME:-陈}
+      - DATABASE_URL=${DATABASE_URL:?请在环境中设置 DATABASE_URL}
+      - AUTH_SECRET=${AUTH_SECRET:?请在环境中设置 AUTH_SECRET}
+      - AUTH_USE_SECURE_COOKIE=${AUTH_USE_SECURE_COOKIE:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  familybook-data:

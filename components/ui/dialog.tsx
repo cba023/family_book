@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" onEscapeKeyDown={(e) => e.preventDefault()} {...props} />
+  return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
 
 function DialogTrigger({
@@ -51,6 +51,7 @@ function DialogContent({
   children,
   showCloseButton = true,
   onPointerDownOutside,
+  onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -67,6 +68,10 @@ function DialogContent({
         onPointerDownOutside={(e) => {
           e.preventDefault();
           onPointerDownOutside?.(e);
+        }}
+        onEscapeKeyDown={(e) => {
+          e.preventDefault();
+          onEscapeKeyDown?.(e);
         }}
         {...props}
       >

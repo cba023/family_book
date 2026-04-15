@@ -322,15 +322,14 @@ export function GedcomImportExport({ onSuccess }: GedcomImportExportProps) {
         document.body.removeChild(pageContainer);
       }
       
-      // 添加 PDF 大纲/书签
+      // 添加 PDF 大纲/书签（Outline.add(parent, title, { pageNumber })）
       try {
-        // @ts-ignore - jsPDF 的 outline 功能
         const outline = pdf.outline;
         if (outline) {
-          outline.add("封面", 0);
-          outline.add("目录", 1);
+          outline.add(null, "封面", { pageNumber: 0 });
+          outline.add(null, "目录", { pageNumber: 1 });
           members.forEach((member, index) => {
-            outline.add(member.name, index + 2);
+            outline.add(null, member.name, { pageNumber: index + 2 });
           });
         }
       } catch (e) {

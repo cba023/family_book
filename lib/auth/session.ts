@@ -53,17 +53,29 @@ export async function getUserRole(): Promise<{
       error: base.error,
     };
   }
-  const profile = await queryOne<ProfileRow>(
-    `SELECT role, username FROM profiles WHERE id = $1`,
-    [base.user.id],
-  );
-  const role = parseAppRole(profile?.role);
-  return {
-    user: base.user,
-    role,
-    username: profile?.username ?? null,
-    error: null,
-  };
+  try {
+    const profile = await queryOne<ProfileRow>(
+      `SELECT role, username FROM profiles WHERE id = $1`,
+      [base.user.id],
+    );
+    const role = parseAppRole(profile?.role);
+    return {
+      user: base.user,
+      role,
+      username: profile?.username ?? null,
+      error: null,
+    };
+  } catch (e) {
+    console.error("getUserRole: database error", e);
+    // 避免 RSC 整页崩溃；会话仍有效但无法读 profiles（多为 DATABASE_URL / 网络 / SSL）
+    return {
+      user: base.user,
+      role: "user",
+      username: null,
+      error:
+        "无法连接数据库，请检查 DATABASE_URL、防火墙及 PostgreSQL 是否允许该主机连接（如 pg_hba.conf）",
+    };
+  }
 }
 
 export async function requireAdmin(): Promise<

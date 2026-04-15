@@ -8,12 +8,20 @@ import { canMaintainGenealogy } from "@/lib/auth/roles";
 import { syntheticEmailFromUsername } from "@/lib/auth/account-username";
 
 export async function BlogHeader() {
-  const { user, role, username } = await getUserRole();
+  const { user, role, username, error: sessionError } = await getUserRole();
   const canMaintain = Boolean(user && canMaintainGenealogy(role));
   const isSuperAdmin = Boolean(user && role === "super_admin");
 
   return (
     <header className="border-b shrink-0 relative">
+      {user && sessionError ? (
+        <div
+          className="bg-amber-500/15 text-amber-900 dark:text-amber-100 text-center text-xs sm:text-sm py-1.5 px-3 border-b border-amber-500/20"
+          role="status"
+        >
+          {sessionError}
+        </div>
+      ) : null}
       <div className="mx-auto flex w-full max-w-6xl min-w-0 flex-nowrap items-center gap-2 sm:gap-3 px-4 md:px-6 py-2 min-h-14">
         <Link
           href="/"

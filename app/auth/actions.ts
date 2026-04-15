@@ -26,13 +26,22 @@ export async function signIn(
     return { error: "请输入密码" };
   }
 
-  const row = await queryOne<UserAuthRow>(
-    `SELECT u.id, u.password_hash
-     FROM app_users u
-     JOIN profiles p ON p.id = u.id
-     WHERE lower(p.username) = lower($1)`,
-    [uCheck.username],
-  );
+  let row: UserAuthRow | null;
+  try {
+    row = await queryOne<UserAuthRow>(
+      `SELECT u.id, u.password_hash
+       FROM app_users u
+       JOIN profiles p ON p.id = u.id
+       WHERE lower(p.username) = lower($1)`,
+      [uCheck.username],
+    );
+  } catch (e) {
+    console.error("signIn: database error", e);
+    return {
+      error:
+        "无法连接数据库，请检查容器能否访问 DATABASE_URL 中的地址与端口（局域网需放行），必要时在连接串追加 ?sslmode=disable 或 sslmode=require",
+    };
+  }
   if (!row) {
     return { error: "账户名或密码错误" };
   }
@@ -40,7 +49,12 @@ export async function signIn(
   if (!ok) {
     return { error: "账户名或密码错误" };
   }
-  await setSessionCookieForUser(row.id);
+  try {
+    await setSessionCookieForUser(row.id);
+  } catch (e) {
+    console.error("signIn: session error", e);
+    return { error: "登录会话写入失败，请检查是否已配置 AUTH_SECRET（至少 16 位）" };
+  }
   return {};
 }
 

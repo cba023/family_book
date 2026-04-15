@@ -8,7 +8,7 @@ export async function GET() {
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
-  return new NextResponse(result.data, {
+  return new NextResponse(Buffer.from(result.data), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${result.filename}"`,
