@@ -1,9 +1,6 @@
 import { Suspense } from "react";
 import { fetchAllFamilyMembers } from "./actions";
 import { FamilyTreeGraph } from "./family-tree-graph";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Box } from "lucide-react";
 import { getUserRole } from "@/lib/auth/session";
 import { LoginPrompt } from "@/components/login-prompt";
 
@@ -63,20 +60,10 @@ async function GraphLoader() {
 }
 
 export default async function FamilyTreeGraphPage() {
-  const { user } = await getUserRole();
-
   return (
     <div className="container mx-auto py-8 px-4">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-6">
         <h1 className="text-3xl font-bold">世系图</h1>
-        {user && (
-          <Button variant="outline" asChild>
-            <Link href="/family-tree/graph-3d">
-              <Box className="mr-2 h-4 w-4" />
-              切换到 3D 视图
-            </Link>
-          </Button>
-        )}
       </div>
 
       <Suspense fallback={<GraphSkeleton />}>

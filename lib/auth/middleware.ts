@@ -42,7 +42,6 @@ export async function updateSession(request: NextRequest) {
     "/",
     "/blog",
     "/family-tree/graph",
-    "/family-tree/graph-3d",
     "/family-tree/statistics",
     "/family-tree/biography-book",
     "/family-tree/timeline",
