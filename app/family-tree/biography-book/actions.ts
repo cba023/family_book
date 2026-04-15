@@ -3,6 +3,7 @@
 import { requireUser, numId } from "@/lib/auth/session";
 import { query } from "@/lib/pg";
 import { formatActionError } from "@/lib/format-action-error";
+import { dedupeSpouseIdsPreserveOrder } from "@/lib/family-member-spouse-ids";
 
 export interface BiographyMember {
   id: number;
@@ -93,10 +94,7 @@ export async function fetchMembersWithBiography(): Promise<{
         for (const s of spouseRows) nameById[numId(s.id)] = String(s.name);
         for (const r of validData) {
           const mid = numId(r.id);
-          const raw = r.spouse_ids;
-          const ids = [...new Set(
-            Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : []
-          )];
+          const ids = dedupeSpouseIdsPreserveOrder(r.spouse_ids);
           spouseNamesMap[mid] = ids.map((sid) => nameById[sid]).filter(Boolean) as string[];
         }
       }

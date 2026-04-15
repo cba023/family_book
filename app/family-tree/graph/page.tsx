@@ -26,7 +26,7 @@ async function GraphLoader() {
     );
   }
 
-  const { data, error } = await fetchAllFamilyMembers();
+  const { data, error, totalMemberCount = 0 } = await fetchAllFamilyMembers();
 
   if (error) {
     return (
@@ -37,6 +37,21 @@ async function GraphLoader() {
   }
 
   if (data.length === 0) {
+    if (totalMemberCount > 0) {
+      return (
+        <div className="bg-muted/50 text-muted-foreground p-8 rounded-lg text-center space-y-3 max-w-lg mx-auto">
+          <p className="text-foreground font-medium">
+            世系图只展示<strong>非嫁入</strong>成员
+          </p>
+          <p>
+            当前共有 {totalMemberCount} 条成员记录，但<strong>全部为「嫁入」成员</strong>；世系图节点不包含嫁入成员，因此图中为空。
+          </p>
+          <p className="text-sm">
+            请在「成员列表」中新增<strong>本姓 / 非嫁入</strong>成员，或把需要出现在世系上的人取消「嫁入」标记。
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="bg-muted/50 text-muted-foreground p-8 rounded-lg text-center">
         <p>暂无族谱数据，请先添加成员。</p>

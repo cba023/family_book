@@ -3,6 +3,8 @@
 import { requireUser, numId } from "@/lib/auth/session";
 import { query, queryOne } from "@/lib/pg";
 import { formatActionError } from "@/lib/format-action-error";
+import { normalizedIsMarriedIn } from "@/lib/family-member-married-in";
+import { dedupeSpouseIdsPreserveOrder } from "@/lib/family-member-spouse-ids";
 
 export interface FamilyMemberNode {
   id: number;
@@ -25,16 +27,23 @@ export interface FamilyMemberNode {
 export interface FetchGraphResult {
   data: FamilyMemberNode[];
   error: string | null;
+  /** 成员表总人数（含嫁入），用于空状态提示 */
+  totalMemberCount?: number;
 }
 
 export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
   try {
+    const totalRow = await queryOne<{ c: string }>(
+      `SELECT COUNT(*)::text AS c FROM family_members`,
+    );
+    const totalMemberCount = parseInt(totalRow?.c ?? "0", 10);
+
     const rows = await query<Record<string, unknown>>(
       `SELECT id, name, generation, sibling_order, father_id, gender,
               official_position, is_alive, spouse_ids, is_married_in,
               remarks, birthday, death_date, residence_place
        FROM family_members
-       WHERE is_married_in = false
+       WHERE NOT (gender = '女' AND is_married_in = true)
        ORDER BY generation ASC NULLS FIRST, sibling_order ASC NULLS FIRST`,
     );
 
@@ -45,9 +54,7 @@ export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
     const spouseIdsMap: Record<number, number[]> = {};
     for (const r of rows) {
       const mid = numId(r.id);
-      const raw = r.spouse_ids;
-      const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
-      spouseIdsMap[mid] = [...new Set(ids)];
+      spouseIdsMap[mid] = dedupeSpouseIdsPreserveOrder(r.spouse_ids);
       spouseNamesMap[mid] = [];
     }
     const allSpouseIds = Object.values(spouseIdsMap).flat();
@@ -61,11 +68,10 @@ export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
       for (const s of spouseRows) nameById[numId(s.id)] = String(s.name);
     }
     for (const mid of Object.keys(spouseIdsMap)) {
-      spouseNamesMap[Number(mid)] = [...new Set(
-        spouseIdsMap[Number(mid)]
-          .map((sid) => nameById[sid])
-          .filter(Boolean)
-      )] as string[];
+      const m = Number(mid);
+      spouseNamesMap[m] = spouseIdsMap[m]
+        .map((sid) => nameById[sid])
+        .filter((n): n is string => !!n);
     }
 
     const transformedData: FamilyMemberNode[] = rows.map((item) => {
@@ -83,7 +89,10 @@ export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
         is_alive: Boolean(item.is_alive),
         spouse_ids: spouseIdsMap[id] ?? [],
         spouse_names: spouseNamesMap[id] ?? [],
-        is_married_in: Boolean(item.is_married_in),
+        is_married_in: normalizedIsMarriedIn(
+          (item.gender as FamilyMemberNode["gender"]) ?? null,
+          Boolean(item.is_married_in),
+        ),
         remarks: item.remarks != null ? String(item.remarks) : null,
         birthday: item.birthday != null ? String(item.birthday) : null,
         death_date: item.death_date != null ? String(item.death_date) : null,
@@ -92,12 +101,13 @@ export async function fetchAllFamilyMembers(): Promise<FetchGraphResult> {
       };
     });
 
-    return { data: transformedData, error: null };
+    return { data: transformedData, error: null, totalMemberCount };
   } catch (error) {
     console.error("Error fetching family members for graph:", error);
     return {
       data: [],
       error: formatActionError(error),
+      totalMemberCount: 0,
     };
   }
 }
@@ -124,21 +134,19 @@ export async function fetchMemberById(
     const item = data;
     const memberId = numId(item.id);
 
-    // 获取配偶（直接从 spouse_ids 数组）
-    const rawSpouseIds = item.spouse_ids;
-    const uniqueIds = [...new Set(
-      Array.isArray(rawSpouseIds) ? rawSpouseIds.map(numId).filter((v) => !isNaN(v)) : []
-    )];
+    const orderedSpouseIds = dedupeSpouseIdsPreserveOrder(item.spouse_ids);
     const spouseNames: string[] = [];
-    const spouseIds: number[] = [];
-    if (uniqueIds.length > 0) {
+    if (orderedSpouseIds.length > 0) {
       const spouseRows = await query<{ id: bigint; name: string }>(
         `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
-        [uniqueIds],
+        [orderedSpouseIds],
       );
-      for (const s of spouseRows) {
-        spouseIds.push(numId(s.id));
-        spouseNames.push(String(s.name));
+      const nameById = Object.fromEntries(
+        spouseRows.map((s) => [numId(s.id), String(s.name)]),
+      );
+      for (const sid of orderedSpouseIds) {
+        const n = nameById[sid];
+        if (n) spouseNames.push(n);
       }
     }
 
@@ -153,9 +161,12 @@ export async function fetchMemberById(
       official_position:
         item.official_position != null ? String(item.official_position) : null,
         is_alive: Boolean(item.is_alive),
-        spouse_ids: spouseIds,
+        spouse_ids: orderedSpouseIds,
         spouse_names: spouseNames,
-      is_married_in: Boolean(item.is_married_in),
+      is_married_in: normalizedIsMarriedIn(
+        (item.gender as FamilyMemberNode["gender"]) ?? null,
+        Boolean(item.is_married_in),
+      ),
       remarks: item.remarks != null ? String(item.remarks) : null,
       birthday: item.birthday != null ? String(item.birthday) : null,
       death_date: item.death_date != null ? String(item.death_date) : null,

@@ -24,7 +24,7 @@ async function Graph3DLoader() {
     );
   }
 
-  const { data, error } = await fetchAllFamilyMembers();
+  const { data, error, totalMemberCount = 0 } = await fetchAllFamilyMembers();
 
   if (error) {
     return (
@@ -35,6 +35,23 @@ async function Graph3DLoader() {
   }
 
   if (data.length === 0) {
+    if (totalMemberCount > 0) {
+      return (
+        <div className="flex items-center justify-center min-h-[400px] border rounded-lg bg-muted/50 text-muted-foreground p-8 text-center">
+          <div className="space-y-3 max-w-lg">
+            <p className="text-foreground font-medium">
+              3D 世系图只展示<strong>非嫁入</strong>成员
+            </p>
+            <p>
+              当前共有 {totalMemberCount} 条成员记录，但<strong>全部为「嫁入」成员</strong>；图中不绘制嫁入成员，因此为空。
+            </p>
+            <p className="text-sm">
+              请在「成员列表」中新增本姓成员，或取消需要显示者的「嫁入」标记。
+            </p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center justify-center h-[600px] border rounded-lg bg-muted/50 text-muted-foreground p-8 text-center">
         <p>暂无族谱数据，请先添加成员。</p>

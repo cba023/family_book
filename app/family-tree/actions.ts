@@ -7,6 +7,9 @@ import { revalidatePath } from "next/cache";
 import { exportToGedcom, parseGedcom } from "@/lib/gedcom";
 import PDFDocument from "pdfkit";
 import { FAMILY_SURNAME } from "@/lib/utils";
+import { normalizedIsMarriedIn } from "@/lib/family-member-married-in";
+import { dedupeSpouseIdsPreserveOrder } from "@/lib/family-member-spouse-ids";
+import type { PoolClient } from "pg";
 
 export interface FamilyMember {
   id: number;
@@ -41,11 +44,7 @@ function mapMemberRow(
 ): FamilyMember {
   const id = numId(item.id);
   const fid = item.father_id != null ? numId(item.father_id) : null;
-  const rawSpouseIds = item.spouse_ids;
-  let spouseIds: number[] = [];
-  if (Array.isArray(rawSpouseIds)) {
-    spouseIds = [...new Set(rawSpouseIds.map((v) => numId(v)).filter((v) => !isNaN(v)))];
-  }
+  const spouseIds = dedupeSpouseIdsPreserveOrder(item.spouse_ids);
   return {
     id,
     name: String(item.name),
@@ -59,7 +58,10 @@ function mapMemberRow(
     is_alive: Boolean(item.is_alive),
     spouse_ids: spouseIds,
     spouse_names: spouseNamesMap[id] ?? [],
-    is_married_in: Boolean(item.is_married_in),
+    is_married_in: normalizedIsMarriedIn(
+      (item.gender as FamilyMember["gender"]) ?? null,
+      Boolean(item.is_married_in),
+    ),
     remarks: item.remarks != null ? String(item.remarks) : null,
     birthday: item.birthday != null ? String(item.birthday) : null,
     death_date: item.death_date != null ? String(item.death_date) : null,
@@ -68,6 +70,70 @@ function mapMemberRow(
     updated_at:
       item.updated_at != null ? String(item.updated_at) : new Date().toISOString(),
   };
+}
+
+/**
+ * 将成员配偶设为有序数组，并维护双向链接（新增/删除配偶时更新对方行）。
+ * 同一批配偶仅重排顺序时只更新本行 spouse_ids，不改变对方数组内容。
+ */
+async function syncSpouseRelations(
+  client: PoolClient,
+  memberId: number,
+  orderedSpouseIds: number[],
+): Promise<void> {
+  const newIds = dedupeSpouseIdsPreserveOrder(orderedSpouseIds);
+  const { rows } = await client.query<{ spouse_ids: unknown }>(
+    `SELECT spouse_ids FROM family_members WHERE id = $1 FOR UPDATE`,
+    [memberId],
+  );
+  if (rows.length === 0) return;
+
+  const oldIds = dedupeSpouseIdsPreserveOrder(rows[0].spouse_ids);
+  const oldSet = new Set(oldIds);
+  const newSet = new Set(newIds);
+
+  await client.query(
+    `UPDATE family_members SET spouse_ids = $1::bigint[], updated_at = NOW() WHERE id = $2`,
+    [newIds, memberId],
+  );
+
+  for (const oid of oldIds) {
+    if (!newSet.has(oid)) {
+      await client.query(
+        `UPDATE family_members SET spouse_ids = array_remove(COALESCE(spouse_ids, '{}'), $1::bigint), updated_at = NOW() WHERE id = $2`,
+        [memberId, oid],
+      );
+    }
+  }
+
+  for (const nid of newIds) {
+    if (!oldSet.has(nid)) {
+      await client.query(
+        `UPDATE family_members SET spouse_ids = array(
+          SELECT DISTINCT unnest(COALESCE(spouse_ids, '{}') || ARRAY[$1::bigint])
+        ), updated_at = NOW() WHERE id = $2`,
+        [memberId, nid],
+      );
+    }
+  }
+}
+
+async function applySpouseLinksForMember(
+  memberId: number,
+  orderedSpouseIds: number[],
+): Promise<void> {
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await syncSpouseRelations(client, memberId, orderedSpouseIds);
+    await client.query("COMMIT");
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
 }
 
 export async function fetchFamilyMembers(
@@ -134,9 +200,8 @@ export async function fetchFamilyMembers(
       }
       for (const mid of memberIds) {
         const raw = rows.find((r) => numId(r.id) === mid)?.spouse_ids;
-        const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
-        // 去重后映射名字
-        spouseNamesMap[mid] = [...new Set(ids)].map((sid) => nameById[sid]).filter(Boolean) as string[];
+        const ids = dedupeSpouseIdsPreserveOrder(raw);
+        spouseNamesMap[mid] = ids.map((sid) => nameById[sid]).filter(Boolean) as string[];
       }
     }
 
@@ -203,7 +268,7 @@ export async function createFamilyMember(
         input.gender ?? null,
         input.official_position ?? null,
         alive,
-        Boolean(input.is_married_in),
+        normalizedIsMarriedIn(input.gender ?? null, input.is_married_in),
         input.remarks ?? null,
         input.birthday ?? null,
         input.death_date ?? null,
@@ -216,22 +281,7 @@ export async function createFamilyMember(
     }
     const newMemberId = numId(row.id);
 
-    // 写入配偶数组（双向，去重）
-    const newSpouseIds = [...new Set(input.spouse_ids ?? [])];
-    for (const spouseId of newSpouseIds) {
-      await getPool().query(
-        `UPDATE family_members SET spouse_ids = array(
-          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
-        ), updated_at = NOW() WHERE id = $2`,
-        [spouseId, newMemberId],
-      );
-      await getPool().query(
-        `UPDATE family_members SET spouse_ids = array(
-          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
-        ), updated_at = NOW() WHERE id = $2`,
-        [newMemberId, spouseId],
-      );
-    }
+    await applySpouseLinksForMember(newMemberId, input.spouse_ids ?? []);
 
     revalidatePath("/family-tree", "layout");
     return { success: true, error: null };
@@ -308,8 +358,7 @@ export async function fetchAllMembersForSelect(): Promise<
     const spouseIdsMap: Record<number, number[]> = {};
     for (const m of data) {
       const mid = numId(m.id);
-      const raw = m.spouse_ids;
-      spouseIdsMap[mid] = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
+      spouseIdsMap[mid] = dedupeSpouseIdsPreserveOrder(m.spouse_ids);
     }
 
     return data.map((m) => ({
@@ -319,8 +368,7 @@ export async function fetchAllMembersForSelect(): Promise<
       gender: m.gender != null ? String(m.gender) : null,
       is_married_in: Boolean(m.is_married_in),
       father_id: m.father_id != null ? numId(m.father_id) : null,
-      // 去重
-      spouse_ids: [...new Set(spouseIdsMap[numId(m.id)] ?? [])],
+      spouse_ids: spouseIdsMap[numId(m.id)] ?? [],
     }));
   } catch (error) {
     console.error("Error fetching members for select:", error);
@@ -363,9 +411,7 @@ export async function fetchMembersForTimeline(): Promise<{
     const spouseIdsMap: Record<number, number[]> = {};
     for (const r of rows) {
       const mid = numId(r.id);
-      const raw = r.spouse_ids;
-      const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
-      spouseIdsMap[mid] = [...new Set(ids)];
+      spouseIdsMap[mid] = dedupeSpouseIdsPreserveOrder(r.spouse_ids);
       spouseNamesMap[mid] = []; // 名字稍后统一查询填充
     }
 
@@ -382,11 +428,10 @@ export async function fetchMembersForTimeline(): Promise<{
       }
     }
     for (const mid of Object.keys(spouseIdsMap)) {
-      spouseNamesMap[Number(mid)] = [...new Set(
-        spouseIdsMap[Number(mid)]
-          .map((sid) => nameById[sid])
-          .filter(Boolean)
-      )] as string[];
+      const m = Number(mid);
+      spouseNamesMap[m] = spouseIdsMap[m]
+        .map((sid) => nameById[sid])
+        .filter((n): n is string => !!n);
     }
 
     const members = rows.map((item) => {
@@ -451,21 +496,21 @@ export async function fetchMemberById(id: number): Promise<FamilyMember | null> 
       father_name = father?.name != null ? String(father.name) : null;
     }
 
-    // 获取配偶（直接从 spouse_ids 数组）
     const memberId = numId(item.id);
-    const rawSpouseIds = item.spouse_ids;
-    const uniqueSpouseIds = [...new Set(
-      Array.isArray(rawSpouseIds)
-        ? rawSpouseIds.map(numId).filter((v) => !isNaN(v))
-        : []
-    )];
+    const orderedSpouseIds = dedupeSpouseIdsPreserveOrder(item.spouse_ids);
     const spouseNames: string[] = [];
-    if (uniqueSpouseIds.length > 0) {
-      const spouseRows = await query<{ name: string }>(
-        `SELECT name FROM family_members WHERE id = ANY($1::bigint[])`,
-        [uniqueSpouseIds],
+    if (orderedSpouseIds.length > 0) {
+      const spouseRows = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [orderedSpouseIds],
       );
-      spouseNames.push(...[...new Set(spouseRows.map((s) => String(s.name)))]);
+      const nameById = Object.fromEntries(
+        spouseRows.map((s) => [numId(s.id), String(s.name)]),
+      );
+      for (const sid of orderedSpouseIds) {
+        const n = nameById[sid];
+        if (n) spouseNames.push(n);
+      }
     }
 
     const fid = item.father_id != null ? numId(item.father_id) : null;
@@ -481,7 +526,7 @@ export async function fetchMemberById(id: number): Promise<FamilyMember | null> 
       official_position:
         item.official_position != null ? String(item.official_position) : null,
       is_alive: Boolean(item.is_alive),
-      spouse_ids: uniqueSpouseIds,
+      spouse_ids: orderedSpouseIds,
       spouse_names: spouseNames,
       is_married_in: Boolean(item.is_married_in),
       remarks: item.remarks != null ? String(item.remarks) : null,
@@ -526,8 +571,7 @@ export async function updateFamilyMember(
         input.gender ?? null,
         input.official_position ?? null,
         alive,
-        // 根据 spouse_ids 是否为空来判断是否已婚
-        Boolean(input.spouse_ids && input.spouse_ids.length > 0),
+        normalizedIsMarriedIn(input.gender ?? null, input.is_married_in),
         input.remarks ?? null,
         input.birthday ?? null,
         input.death_date ?? null,
@@ -536,22 +580,7 @@ export async function updateFamilyMember(
       ],
     );
 
-    // 写入配偶数组（双向，去重）
-    const newSpouseIds = [...new Set(input.spouse_ids ?? [])];
-    for (const spouseId of newSpouseIds) {
-      await getPool().query(
-        `UPDATE family_members SET spouse_ids = array(
-          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
-        ), updated_at = NOW() WHERE id = $2`,
-        [spouseId, input.id],
-      );
-      await getPool().query(
-        `UPDATE family_members SET spouse_ids = array(
-          SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
-        ), updated_at = NOW() WHERE id = $2`,
-        [input.id, spouseId],
-      );
-    }
+    await applySpouseLinksForMember(input.id, input.spouse_ids ?? []);
 
     revalidatePath("/family-tree", "layout");
     return { success: true, error: null };
@@ -716,8 +745,7 @@ export async function exportFamilyToPDF(): Promise<{
     const allSpouseIds: number[] = [];
     for (const m of members) {
       const mid = numId(m.id);
-      const raw = (m as Record<string, unknown>).spouse_ids;
-      const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
+      const ids = dedupeSpouseIdsPreserveOrder((m as Record<string, unknown>).spouse_ids);
       spouseMap[mid] = [];
       if (ids.length > 0) {
         allSpouseIds.push(...ids);
@@ -732,8 +760,7 @@ export async function exportFamilyToPDF(): Promise<{
       for (const s of spouseRows) nameById[numId(s.id)] = String(s.name);
       for (const m of members) {
         const mid = numId(m.id);
-        const raw = (m as Record<string, unknown>).spouse_ids;
-        const ids = Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
+        const ids = dedupeSpouseIdsPreserveOrder((m as Record<string, unknown>).spouse_ids);
         spouseMap[mid] = ids.map((sid) => nameById[sid]).filter(Boolean) as string[];
       }
     }
@@ -918,12 +945,9 @@ export async function exportFamilyMembersToJson(): Promise<{
     const memberSpouseIdsMap: Record<number, number[]> = {};
     for (const r of rows) {
       const mid = numId(r.id);
-      const raw = r.spouse_ids;
-      if (Array.isArray(raw)) {
-        const ids = [...new Set(raw.map(numId).filter((v) => !isNaN(v)))];
-        memberSpouseIdsMap[mid] = ids;
-        allSpouseIds.push(...ids);
-      }
+      const ids = dedupeSpouseIdsPreserveOrder(r.spouse_ids);
+      memberSpouseIdsMap[mid] = ids;
+      allSpouseIds.push(...ids);
     }
     if (allSpouseIds.length > 0) {
       const spouseRows = await query<{ id: bigint; name: string }>(
@@ -934,13 +958,11 @@ export async function exportFamilyMembersToJson(): Promise<{
       for (const s of spouseRows) {
         nameById[numId(s.id)] = String(s.name);
       }
-      // 为每个成员构建其配偶名字列表（去重）
       for (const mid of Object.keys(memberSpouseIdsMap)) {
-        spouseNamesMap[Number(mid)] = [...new Set(
-          memberSpouseIdsMap[Number(mid)]
-            .map((sid) => nameById[sid])
-            .filter(Boolean)
-        )] as string[];
+        const m = Number(mid);
+        spouseNamesMap[m] = memberSpouseIdsMap[m]
+          .map((sid) => nameById[sid])
+          .filter((n): n is string => !!n);
       }
     }
 
@@ -1017,7 +1039,7 @@ export async function importFamilyMembersFromGedcom(gedcomContent: string): Prom
           member.gender,
           member.official_position,
           member.is_alive,
-          member.is_married_in,
+          normalizedIsMarriedIn(member.gender, member.is_married_in),
           member.remarks,
           member.birthday,
           member.death_date,
@@ -1045,22 +1067,10 @@ export async function importFamilyMembersFromGedcom(gedcomContent: string): Prom
           [actualFatherId, actualId]
         );
 
-        // 写入配偶数组（双向，去重）
-        const uniqueSpouseIds = [...new Set(spouseIds)];
-        for (const spouseId of uniqueSpouseIds) {
-          await pool.query(
-            `UPDATE family_members SET spouse_ids = array(
-              SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
-            ) WHERE id = $2`,
-            [spouseId, actualId]
-          );
-          await pool.query(
-            `UPDATE family_members SET spouse_ids = array(
-              SELECT distinct unnest(COALESCE(spouse_ids,'{}') || ARRAY[$1::bigint])
-            ) WHERE id = $2`,
-            [actualId, spouseId]
-          );
-        }
+        await applySpouseLinksForMember(
+          numId(actualId),
+          dedupeSpouseIdsPreserveOrder(spouseIds),
+        );
       }
     }
     

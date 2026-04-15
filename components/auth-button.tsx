@@ -71,24 +71,34 @@ export function AuthButton({ user, profile }: AuthButtonProps) {
   const showRoleBadge = role === "super_admin" || role === "admin";
   const username = (profile?.username as string | null)?.trim() ?? "";
   const accountLabel = username || user.email?.split("@")[0] || user.id.slice(0, 8);
+  const hideProfileForSuperAdmin = role === "super_admin";
 
   return (
     <>
       {/* 仅超大屏展开完整账户区；中屏只折叠右侧，中间 Tab 始终平铺 */}
       <div className="hidden 2xl:flex flex-row items-center gap-3 2xl:gap-4 shrink-0">
-        <Link
-          href="/family-tree/settings/users"
-          className="text-sm font-medium truncate max-w-[min(220px,18vw)] hover:text-primary transition-colors"
-        >
-          {accountLabel}
-          {showRoleBadge ? (
-            <span className="text-muted-foreground/80"> · {roleLabel}</span>
-          ) : null}
-        </Link>
+        {hideProfileForSuperAdmin ? (
+          <span className="text-sm font-medium truncate max-w-[min(220px,18vw)] text-foreground">
+            {accountLabel}
+            {showRoleBadge ? (
+              <span className="text-muted-foreground/80"> · {roleLabel}</span>
+            ) : null}
+          </span>
+        ) : (
+          <Link
+            href="/family-tree/settings/users"
+            className="text-sm font-medium truncate max-w-[min(220px,18vw)] hover:text-primary transition-colors"
+          >
+            {accountLabel}
+            {showRoleBadge ? (
+              <span className="text-muted-foreground/80"> · {roleLabel}</span>
+            ) : null}
+          </Link>
+        )}
         <div className="flex flex-row gap-2 shrink-0">
           {canMaintain(role) && (
             <Button asChild size="sm" variant="outline">
-              <Link href="/family-tree/settings/data-maintenance">用户管理</Link>
+              <Link href="/family-tree/settings/data-maintenance">数据维护</Link>
             </Button>
           )}
           <LogoutButton />
@@ -118,12 +128,14 @@ export function AuthButton({ user, profile }: AuthButtonProps) {
               ) : null}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/family-tree/settings/users">账户与资料</Link>
-            </DropdownMenuItem>
+            {!hideProfileForSuperAdmin ? (
+              <DropdownMenuItem asChild>
+                <Link href="/family-tree/settings/users">账户与资料</Link>
+              </DropdownMenuItem>
+            ) : null}
             {canMaintain(role) ? (
               <DropdownMenuItem asChild>
-                <Link href="/family-tree/settings/data-maintenance">用户管理</Link>
+                <Link href="/family-tree/settings/data-maintenance">数据维护</Link>
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuSeparator />

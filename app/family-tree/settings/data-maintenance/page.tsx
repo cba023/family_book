@@ -34,17 +34,25 @@ export default async function DataMaintenancePage() {
           </div>
         </Link>
 
-        <div className="flex items-center gap-4 p-6 border rounded-lg bg-muted/30">
-          <div className="p-3 bg-muted rounded-lg">
-            <Shield className="h-6 w-6 text-muted-foreground" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-lg">我的资料</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              修改个人资料和密码
-            </p>
-          </div>
-        </div>
+        {gate.role !== "super_admin" && (
+          <Link
+            href="/family-tree/settings/users"
+            className="flex items-center gap-4 p-6 border rounded-lg hover:bg-muted/50 transition-colors group"
+          >
+            <div className="p-3 bg-primary/10 rounded-lg">
+              <Shield className="h-6 w-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-lg">我的资料</h2>
+                <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                修改个人资料和密码
+              </p>
+            </div>
+          </Link>
+        )}
       </div>
     </div>
   );

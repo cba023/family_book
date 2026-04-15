@@ -8,6 +8,9 @@ export default async function SettingsProfilePage() {
   if (!gate.user) {
     redirect("/blog");
   }
+  if (gate.role === "super_admin") {
+    redirect("/family-tree/settings/data-maintenance");
+  }
 
   const profile = await queryOne<{
     full_name: string | null;

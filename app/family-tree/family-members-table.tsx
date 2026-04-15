@@ -29,7 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  Loader2,
+} from "lucide-react";
 import type { FamilyMember } from "./actions";
 import {
   createFamilyMember,
@@ -140,6 +149,12 @@ export function FamilyMembersTable({
     });
   }, [parentOptions, formData.gender, isFemale, editingMember, formData.spouse_ids]);
 
+  /** 父亲只能选择男性成员 */
+  const fatherSelectOptions = React.useMemo(
+    () => parentOptions.filter((p) => p.gender === "男"),
+    [parentOptions],
+  );
+
   // 配偶选择弹窗状态
   const [isSpouseDialogOpen, setIsSpouseDialogOpen] = React.useState(false);
   const [spouseSearchQuery, setSpouseSearchQuery] = React.useState("");
@@ -168,6 +183,21 @@ export function FamilyMembersTable({
     }
     return result;
   }, [formData.spouse_ids, parentOptions]);
+
+  /** 男性多位妻子时调整「长房、次房」等显示顺序 */
+  const moveSpouseOrder = React.useCallback(
+    (index: number, direction: "up" | "down") => {
+      setFormData((prev) => {
+        if (prev.gender !== "男" || prev.spouse_ids.length < 2) return prev;
+        const ids = [...prev.spouse_ids];
+        const j = direction === "up" ? index - 1 : index + 1;
+        if (j < 0 || j >= ids.length) return prev;
+        [ids[index], ids[j]] = [ids[j], ids[index]];
+        return { ...prev, spouse_ids: ids };
+      });
+    },
+    [],
+  );
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
@@ -338,8 +368,11 @@ export function FamilyMembersTable({
       gender: (formData.gender as "男" | "女") || null,
       official_position: formData.official_position || null,
       is_alive: formData.is_alive,
-      // 去重并过滤无效值
-      spouse_ids: [...new Set(formData.spouse_ids.filter(id => !isNaN(id) && id > 0))],
+      // 去重并过滤无效值；女性仅保留一位丈夫
+      spouse_ids: (() => {
+        const ids = [...new Set(formData.spouse_ids.filter(id => !isNaN(id) && id > 0))];
+        return isFemale ? ids.slice(0, 1) : ids;
+      })(),
       is_married_in: formData.is_married_in,
       remarks: formData.remarks || null,
       birthday: formData.birthdayUnknown ? null : formData.birthday || null,
@@ -489,7 +522,7 @@ export function FamilyMembersTable({
                   </div>
                 )}
 
-                {/* 配偶 - 男性或非嫁入女性显示，支持多选 */}
+                {/* 配偶 - 男性或非嫁入女性；男性可多选妻子，女性仅单选丈夫 */}
                 {(!isFemale || formData.is_married_in) && (
                   <div className="grid grid-cols-4 items-start gap-4">
                     <Label className="text-right pt-2">
@@ -498,33 +531,62 @@ export function FamilyMembersTable({
                     <div className="col-span-3 space-y-2">
                       {/* 已选配偶标签 */}
                       {selectedSpouses.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {selectedSpouses.map((spouse, i) => (
-                            <span
-                              key={spouse.id}
-                              className="inline-flex items-center gap-1 bg-primary/10 text-primary text-sm px-2 py-0.5 rounded border border-primary/20"
-                            >
-                              {spouse.name}
-                              <button
-                                type="button"
-                                className="hover:text-destructive"
-                                onClick={() => {
-                                  setFormData(prev => {
-                                    // 过滤掉该配偶（移除所有匹配的 id）
-                                    const filtered = prev.spouse_ids.filter(id => id !== spouse.id);
-                                    const newData = { ...prev, spouse_ids: filtered };
-                                    // 如果是女性清空了配偶，重置世代
-                                    if (isFemale) {
-                                      newData.generation = "";
-                                    }
-                                    return newData;
-                                  });
-                                }}
+                        <div className="flex flex-col gap-1">
+                          {!isFemale && selectedSpouses.length > 1 && (
+                            <p className="text-xs text-muted-foreground">
+                              多位妻子时可用箭头调整顺序（如长房、次房），将同步到列表与家谱展示。
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-1">
+                            {selectedSpouses.map((spouse, i) => (
+                              <span
+                                key={spouse.id}
+                                className="inline-flex items-center gap-1 bg-primary/10 text-primary text-sm px-2 py-0.5 rounded border border-primary/20"
                               >
-                                ×
-                              </button>
-                            </span>
-                          ))}
+                                {!isFemale && selectedSpouses.length > 1 && (
+                                  <span className="inline-flex flex-col gap-0">
+                                    <button
+                                      type="button"
+                                      className="p-0 h-3.5 leading-none rounded hover:bg-primary/20 disabled:opacity-30"
+                                      disabled={i === 0}
+                                      aria-label="上移"
+                                      onClick={() => moveSpouseOrder(i, "up")}
+                                    >
+                                      <ChevronUp className="h-3 w-3" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="p-0 h-3.5 leading-none rounded hover:bg-primary/20 disabled:opacity-30"
+                                      disabled={i === selectedSpouses.length - 1}
+                                      aria-label="下移"
+                                      onClick={() => moveSpouseOrder(i, "down")}
+                                    >
+                                      <ChevronDown className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                )}
+                                {spouse.name}
+                                <button
+                                  type="button"
+                                  className="hover:text-destructive"
+                                  onClick={() => {
+                                    setFormData(prev => {
+                                      // 过滤掉该配偶（移除所有匹配的 id）
+                                      const filtered = prev.spouse_ids.filter(id => id !== spouse.id);
+                                      const newData = { ...prev, spouse_ids: filtered };
+                                      // 如果是女性清空了配偶，重置世代
+                                      if (isFemale) {
+                                        newData.generation = "";
+                                      }
+                                      return newData;
+                                    });
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       )}
                       <Button
@@ -552,10 +614,10 @@ export function FamilyMembersTable({
                     <div className="col-span-3">
                       <FatherCombobox
                         value={formData.father_id}
-                        options={parentOptions}
+                        options={fatherSelectOptions}
                         isLoading={isLoadingParents}
                         onChange={(value) => {
-                          const father = parentOptions.find(p => p.id.toString() === value);
+                          const father = fatherSelectOptions.find(p => p.id.toString() === value);
                           const newGeneration = father && father.generation !== null 
                             ? (father.generation + 1).toString() 
                             : (value === "null" ? "" : formData.generation);
@@ -796,13 +858,13 @@ export function FamilyMembersTable({
         </DialogContent>
       </Dialog>
 
-      {/* 配偶选择弹窗（多选） */}
+      {/* 配偶选择弹窗（女性单选丈夫，男性多选妻子） */}
       <Dialog open={isSpouseDialogOpen} onOpenChange={setIsSpouseDialogOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>选择{spouseLabel}</DialogTitle>
             <DialogDescription>
-              {isFemale ? "选择家族内的男性成员作为丈夫（可多选）" : "选择女性成员作为妻子（可多选）"}
+              {isFemale ? "选择家族内的一位男性成员作为丈夫" : "选择女性成员作为妻子（可多选）"}
             </DialogDescription>
           </DialogHeader>
 

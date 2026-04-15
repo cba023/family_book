@@ -377,6 +377,9 @@ export async function updateOwnProfile(
     if (!gate.user) {
       return { success: false, error: "未登录" };
     }
+    if (gate.role === "super_admin") {
+      return { success: false, error: "超级管理员不支持在此修改资料" };
+    }
 
     const fnCheck = validateOptionalFullName(input.fullName);
     if (!fnCheck.ok) {
@@ -409,6 +412,9 @@ export async function changeOwnPassword(
     const gate = await getUserRole();
     if (!gate.user) {
       return { success: false, error: "未登录" };
+    }
+    if (gate.role === "super_admin") {
+      return { success: false, error: "超级管理员不支持在此修改密码" };
     }
     if (!newPassword || newPassword.length < 6) {
       return { success: false, error: "密码至少 6 位" };
