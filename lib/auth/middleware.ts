@@ -44,7 +44,6 @@ export async function updateSession(request: NextRequest) {
     "/family-tree/graph",
     "/family-tree/statistics",
     "/family-tree/biography-book",
-    "/family-tree/timeline",
   ];
   const path = request.nextUrl.pathname;
   const isPublicPath =

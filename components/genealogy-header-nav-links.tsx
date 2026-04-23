@@ -58,9 +58,6 @@ export function GenealogyHeaderNavLinks({
       >
         生平册
       </Link>
-      <Link href="/family-tree/timeline" className={`${getLinkClass("/family-tree/timeline")} shrink-0`}>
-        时间轴
-      </Link>
       <Link
         href="/family-tree/statistics"
         className={`${getLinkClass("/family-tree/statistics")} shrink-0`}
