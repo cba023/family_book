@@ -99,9 +99,14 @@ const DEFAULT_VISIBLE_GENERATIONS = 5;
 
 interface CachedLayout {
   positions: Map<number, { x: number; y: number }>;
-  generationYRange: Map<number, { minY: number; maxY: number; count: number }>;
+  generationYRange: Map<number, { minY: number; maxY: number; count: number; label: string }>;
   minX: number;
 }
+
+// 世代标尺常量
+const RULER_WIDTH = 56;
+const RULER_TICK_HEIGHT = 8;
+const RULER_LABEL_WIDTH = 40;
 
 /**
  * 增量布局计算 - 只重算变化的子树
@@ -229,7 +234,7 @@ function getIncrementalLayout(
 
   // 转换为节点，同时记录每个世代的Y范围
   let minX = Infinity;
-  const generationYRange = new Map<number, { minY: number; maxY: number; count: number }>();
+  const generationYRange = new Map<number, { minY: number; maxY: number; count: number; label: string }>();
   visibleMembers.forEach((member) => {
     const nodeWithPosition = dagreGraph.node(String(member.id));
     const x = nodeWithPosition.x - NODE_WIDTH / 2;
@@ -239,6 +244,7 @@ function getIncrementalLayout(
     newPositions.set(member.id, { x, y });
 
     if (member.generation) {
+      const label = `第${toChineseNum(member.generation)}世`;
       const current = generationYRange.get(member.generation);
       if (current) {
         current.minY = Math.min(current.minY, nodeWithPosition.y);
@@ -249,6 +255,7 @@ function getIncrementalLayout(
           minY: nodeWithPosition.y,
           maxY: nodeWithPosition.y,
           count: 1,
+          label,
         });
       }
     }
@@ -278,30 +285,13 @@ function getIncrementalLayout(
     };
   });
 
-  // 生成世代标尺 - 只显示有可见成员的世代
-  const generationNodes: Node[] = [];
-  const labelX = minX - 140;
-  generationYRange.forEach(({ minY, maxY, count }, generation) => {
-    // 标签Y位置对应该世代的中间位置
-    const centerY = (minY + maxY) / 2 - NODE_HEIGHT / 2;
-    generationNodes.push({
-      id: `gen-label-${generation}`,
-      type: "generationLabel",
-      position: { x: labelX, y: centerY },
-      data: { generation, label: `第${toChineseNum(generation)}世` },
-      draggable: false,
-      selectable: false,
-      zIndex: -1,
-    });
-  });
-
   const cache: CachedLayout = {
     positions: newPositions,
     generationYRange,
     minX,
   };
 
-  return { nodes: [...memberNodes, ...generationNodes], edges, cache };
+  return { nodes: memberNodes, edges, cache };
 }
 
 /**
@@ -327,6 +317,9 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDraggable, setIsDraggable] = useState(false);
+
+  // ReactFlow viewport 状态
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
   
   // 默认折叠超过5世的节点
   const initialCollapsedIds = useMemo(() => {
@@ -414,9 +407,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
 
   // 增量布局计算
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
-    // 检测哪些节点的折叠状态发生了变化
     const changedIds = new Set<number>();
-    // 通过比较当前 collapsedIds 和上一次的来追踪变化（简化版：暂不追踪，全量计算）
 
     const { nodes, edges, cache } = getIncrementalLayout(
       initialData,
@@ -427,11 +418,39 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
       onToggleCollapse
     );
     layoutCacheRef.current = cache;
+
     return { nodes, edges };
   }, [initialData, childrenMap, collapsedIds]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  // 计算 generationYRange
+  const generationYRange = useMemo(() => {
+    if (nodes.length === 0) return new Map();
+    const rangeMap = new Map<number, { minY: number; maxY: number; count: number; label: string }>();
+    nodes.forEach((node) => {
+      const data = node.data as FamilyNodeData;
+      if (data?.generation) {
+        const label = `第${toChineseNum(data.generation)}世`;
+        const y = node.position.y;
+        const current = rangeMap.get(data.generation);
+        if (current) {
+          current.minY = Math.min(current.minY, y);
+          current.maxY = Math.max(current.maxY, y);
+          current.count++;
+        } else {
+          rangeMap.set(data.generation, {
+            minY: y,
+            maxY: y,
+            count: 1,
+            label,
+          });
+        }
+      }
+    });
+    return rangeMap;
+  }, [nodes]);
 
   useEffect(() => {
     setNodes(initialNodes);
@@ -835,7 +854,11 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
         onNodeDoubleClick={onNodeDoubleClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
+        onMove={(_, viewport) => {
+          setViewport(viewport);
+        }}
         onInit={(instance) => {
+          setViewport(instance.getViewport());
           instance.fitView({ padding: 0.2 });
         }}
         minZoom={0.1}
@@ -1023,6 +1046,9 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
           </span>
         </Panel>
       </ReactFlow>
+
+      {/* 世代标尺 - 在 ReactFlow 外部 */}
+      <GenerationRuler generationYRange={generationYRange} viewport={viewport} />
     </div>
   );
 });
@@ -1086,3 +1112,113 @@ export function VirtualizedFamilyTreeGraph({ initialData, totalCount, onMemberCl
     </>
   );
 }
+
+/**
+ * 世代标尺组件 - CAD 风格侧边标尺，始终与世代位置对应
+ */
+interface GenerationRulerProps {
+  generationYRange: Map<number, { minY: number; maxY: number; count: number; label: string }>;
+  viewport: { x: number; y: number; zoom: number };
+}
+
+const GenerationRuler = memo(function GenerationRuler({
+  generationYRange,
+  viewport,
+}: GenerationRulerProps) {
+  if (!generationYRange || generationYRange.size === 0) {
+    return null;
+  }
+
+  const sortedGenerations = Array.from(generationYRange.entries()).sort((a, b) => a[0] - b[0]);
+
+  // 计算视口内可见的世代
+  const viewportTop = -viewport.y / viewport.zoom;
+  const viewportBottom = (viewportTop + window.innerHeight) / viewport.zoom;
+
+  return (
+    <div
+      className="absolute left-0 top-0 h-full pointer-events-none z-20 overflow-hidden"
+      style={{ width: RULER_WIDTH }}
+    >
+      {/* 标尺背景 */}
+      <div
+        className="absolute left-0 top-0 h-full bg-background/95"
+        style={{ width: RULER_LABEL_WIDTH }}
+      />
+
+      {/* 垂直分隔线 */}
+      <div
+        className="absolute top-0 right-0 h-full border-r border-border"
+        style={{ width: 1 }}
+      />
+
+      {/* 世代标记 */}
+      {sortedGenerations.map(([generation, { minY, maxY, label }]) => {
+        const centerY = minY + (maxY - minY) / 2;
+        const topY = minY;
+        const bottomY = maxY + NODE_HEIGHT;
+
+        return (
+          <div
+            key={generation}
+            className="absolute left-0"
+            style={{
+              top: centerY * viewport.zoom + viewport.y,
+              transform: 'translateY(-50%)',
+              width: RULER_WIDTH,
+            }}
+          >
+            {/* 世代区域背景 */}
+            <div
+              className="absolute left-0 bg-accent/10 rounded-sm"
+              style={{
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: RULER_LABEL_WIDTH,
+                height: (bottomY - topY) * viewport.zoom,
+              }}
+            />
+
+            {/* 刻度线和标签组 */}
+            <div className="relative" style={{ width: RULER_WIDTH, height: 0 }}>
+              {/* 刻度线 */}
+              <div
+                className="absolute bg-border"
+                style={{
+                  right: 0,
+                  top: -RULER_TICK_HEIGHT / 2,
+                  width: RULER_TICK_HEIGHT,
+                  height: 1,
+                }}
+              />
+
+              {/* 世代标签 */}
+              <div
+                className="absolute right-0 flex items-center justify-end pr-2"
+                style={{
+                  top: 0,
+                  height: 24,
+                  transform: 'translateY(-50%)',
+                }}
+              >
+                <span className="text-sm font-semibold text-foreground/80 whitespace-nowrap">
+                  {label}
+                </span>
+              </div>
+            </div>
+
+            {/* 水平参考线 */}
+            <div
+              className="absolute left-0 border-t border-border/40"
+              style={{
+                top: '50%',
+                right: -1000,
+                borderStyle: 'dashed',
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+});
