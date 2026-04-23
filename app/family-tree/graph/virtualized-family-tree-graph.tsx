@@ -297,9 +297,10 @@ function getIncrementalLayout(
 const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraphInner({
   initialData,
   allData,
+  totalCount,
   onMemberClick,
   onSpouseClick,
-}: VirtualizedFamilyTreeGraphProps) {
+}: VirtualizedFamilyTreeGraphProps & { totalCount?: number }) {
   const reactFlowInstance = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
   const [userEmail] = useState<string>("本地用户");
@@ -966,7 +967,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
         {/* 统计 */}
         <Panel position="bottom-right" className="bg-background/95 backdrop-blur-sm border rounded-md px-3 py-2">
           <span className="text-sm text-muted-foreground">
-            共 {initialData.length} 位成员（显示 {nodes.length} 个节点）
+            共 {totalCount ?? initialData.length} 位成员（显示 {nodes.length} 个节点）
           </span>
         </Panel>
       </ReactFlow>
@@ -977,7 +978,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
 /**
  * 虚拟化世系图容器 - 负责数据加载和状态管理
  */
-export function VirtualizedFamilyTreeGraph({ initialData, onMemberClick, onSpouseClick }: VirtualizedFamilyTreeGraphProps) {
+export function VirtualizedFamilyTreeGraph({ initialData, totalCount, onMemberClick, onSpouseClick }: VirtualizedFamilyTreeGraphProps) {
   const [selectedMember, setSelectedMember] = useState<FamilyMemberNode | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
@@ -1018,6 +1019,7 @@ export function VirtualizedFamilyTreeGraph({ initialData, onMemberClick, onSpous
         <VirtualizedFamilyTreeGraphInner
           initialData={initialData}
           allData={initialData}
+          totalCount={totalCount}
           onMemberClick={handleMemberClick}
           onSpouseClick={handleSpouseClick}
         />

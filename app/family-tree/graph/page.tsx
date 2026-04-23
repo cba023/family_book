@@ -45,12 +45,8 @@ async function GraphLoader() {
 
   // 根据数据量选择渲染方式
   if (shouldVirtualize(stats.total)) {
-    // 大数据量：使用虚拟化渲染，只加载前3代
-    const initialGenerations = 3;
-    const { data, error, maxGeneration } = await fetchFamilyMembersByGenerations(
-      1,
-      initialGenerations
-    );
+    // 大数据量：加载全量数据用于 childrenMap 关系构建
+    const { data, error, maxGeneration } = await fetchFamilyMembersByGenerations();
 
     if (error) {
       return (
