@@ -33,6 +33,7 @@ import {
   MoreVertical,
   ChevronLeft,
   ChevronRight,
+  ChevronsUp,
   Users,
 } from "lucide-react";
 import {
@@ -93,9 +94,12 @@ const VERTICAL_GAP = 120;
 // 可视区域缓冲区（额外渲染的代数）
 const VISIBLE_GENERATION_BUFFER = 1;
 
+// 默认展开的代数（超过此代数的节点默认折叠）
+const DEFAULT_VISIBLE_GENERATIONS = 5;
+
 interface CachedLayout {
   positions: Map<number, { x: number; y: number }>;
-  generationYMap: Map<number, { totalY: number; count: number }>;
+  generationYRange: Map<number, { minY: number; maxY: number; count: number }>;
   minX: number;
 }
 
@@ -107,7 +111,8 @@ function getIncrementalLayout(
   childrenMap: Map<number, number[]>,
   collapsedIds: Set<number>,
   changedIds: Set<number>, // 折叠状态改变的节点ID
-  layoutCache: CachedLayout | null
+  layoutCache: CachedLayout | null,
+  onToggleCollapse?: (id: number) => void
 ): { nodes: Node[]; edges: Edge[]; cache: CachedLayout } {
   const memberMap = new Map(allMembers.map((m) => [m.id, m]));
   const roots = allMembers.filter((m) => !m.father_id || !memberMap.has(m.father_id));
@@ -182,7 +187,6 @@ function getIncrementalLayout(
   // 构建节点和边
   const edges: Edge[] = [];
   const newPositions = new Map<number, { x: number; y: number }>();
-  const generationYMap = new Map<number, { totalY: number; count: number }>();
 
   // 添加节点到 dagre
   visibleMembers.forEach((member) => {
@@ -223,8 +227,9 @@ function getIncrementalLayout(
   // 计算布局
   dagre.layout(dagreGraph);
 
-  // 转换为节点
+  // 转换为节点，同时记录每个世代的Y范围
   let minX = Infinity;
+  const generationYRange = new Map<number, { minY: number; maxY: number; count: number }>();
   visibleMembers.forEach((member) => {
     const nodeWithPosition = dagreGraph.node(String(member.id));
     const x = nodeWithPosition.x - NODE_WIDTH / 2;
@@ -234,11 +239,18 @@ function getIncrementalLayout(
     newPositions.set(member.id, { x, y });
 
     if (member.generation) {
-      const current = generationYMap.get(member.generation) || { totalY: 0, count: 0 };
-      generationYMap.set(member.generation, {
-        totalY: current.totalY + nodeWithPosition.y,
-        count: current.count + 1,
-      });
+      const current = generationYRange.get(member.generation);
+      if (current) {
+        current.minY = Math.min(current.minY, nodeWithPosition.y);
+        current.maxY = Math.max(current.maxY, nodeWithPosition.y);
+        current.count++;
+      } else {
+        generationYRange.set(member.generation, {
+          minY: nodeWithPosition.y,
+          maxY: nodeWithPosition.y,
+          count: 1,
+        });
+      }
     }
   });
 
@@ -261,20 +273,21 @@ function getIncrementalLayout(
         hasChildren,
         collapsed: collapsedIds.has(member.id),
         branchColor: nodeColor,
+        onToggleCollapse: onToggleCollapse,
       } as FamilyNodeData,
     };
   });
 
-  // 生成世代标尺
+  // 生成世代标尺 - 只显示有可见成员的世代
   const generationNodes: Node[] = [];
   const labelX = minX - 140;
-  generationYMap.forEach(({ totalY, count }, generation) => {
-    const avgY = totalY / count;
-    const labelY = avgY - 40;
+  generationYRange.forEach(({ minY, maxY, count }, generation) => {
+    // 标签Y位置对应该世代的中间位置
+    const centerY = (minY + maxY) / 2 - NODE_HEIGHT / 2;
     generationNodes.push({
       id: `gen-label-${generation}`,
       type: "generationLabel",
-      position: { x: labelX, y: labelY },
+      position: { x: labelX, y: centerY },
       data: { generation, label: `第${toChineseNum(generation)}世` },
       draggable: false,
       selectable: false,
@@ -284,7 +297,7 @@ function getIncrementalLayout(
 
   const cache: CachedLayout = {
     positions: newPositions,
-    generationYMap,
+    generationYRange,
     minX,
   };
 
@@ -314,7 +327,19 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDraggable, setIsDraggable] = useState(false);
-  const [collapsedIds, setCollapsedIds] = useState<Set<number>>(new Set());
+  
+  // 默认折叠超过5世的节点
+  const initialCollapsedIds = useMemo(() => {
+    const collapsed = new Set<number>();
+    initialData.forEach((m) => {
+      if (m.generation && m.generation > DEFAULT_VISIBLE_GENERATIONS) {
+        collapsed.add(m.id);
+      }
+    });
+    return collapsed;
+  }, [initialData]);
+  
+  const [collapsedIds, setCollapsedIds] = useState<Set<number>>(initialCollapsedIds);
 
   // 布局缓存
   const layoutCacheRef = useRef<CachedLayout | null>(null);
@@ -398,7 +423,8 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
       childrenMap,
       collapsedIds,
       changedIds,
-      layoutCacheRef.current
+      layoutCacheRef.current,
+      onToggleCollapse
     );
     layoutCacheRef.current = cache;
     return { nodes, edges };
@@ -612,6 +638,23 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
     }
   }, [highlightedId, reactFlowInstance]);
 
+  // 双击节点时切换折叠状态
+  const onNodeDoubleClick = useCallback(
+    (_event: React.MouseEvent, node: Node) => {
+      const memberId = Number(node.id);
+      setCollapsedIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(memberId)) {
+          next.delete(memberId);
+        } else {
+          next.add(memberId);
+        }
+        return next;
+      });
+    },
+    []
+  );
+
   const onNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       const member = initialData.find((m) => m.id === Number(node.id));
@@ -789,6 +832,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onInit={(instance) => {
@@ -941,6 +985,14 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
                 <DropdownMenuItem onClick={onExpandAll}>
                   <ChevronsDown className="h-4 w-4 mr-2" />
                   全部展开
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setCollapsedIds(initialCollapsedIds);
+                  }}
+                >
+                  <ChevronsUp className="h-4 w-4 mr-2" />
+                  收起前5世
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={toggleDraggable}>
                   {isDraggable ? (

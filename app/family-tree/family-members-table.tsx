@@ -35,6 +35,8 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   ChevronUp,
   ChevronDown,
   Loader2,
@@ -85,6 +87,7 @@ export function FamilyMembersTable({
 
   const [editingMember, setEditingMember] = React.useState<FamilyMember | null>(null);
   const [biographyMember, setBiographyMember] = React.useState<FamilyMember | null>(null);
+  const [jumpPage, setJumpPage] = React.useState(currentPage.toString());
   const [parentOptions, setParentOptions] = React.useState<
     { id: number; name: string; generation: number | null; gender: string | null; is_married_in: boolean; father_id: number | null; spouse_ids: number[] }[]
   >([]);
@@ -235,6 +238,24 @@ export function FamilyMembersTable({
 
   const handlePageChange = (newPage: number) => {
     updateUrlParams({ page: newPage.toString() });
+  };
+
+  // 同步 jumpPage 与当前页码
+  React.useEffect(() => {
+    setJumpPage(currentPage.toString());
+  }, [currentPage]);
+
+  const handleJump = () => {
+    const page = parseInt(jumpPage, 10);
+    if (isNaN(page) || page < 1) {
+      setJumpPage("1");
+      handlePageChange(1);
+    } else if (page > totalPages) {
+      setJumpPage(totalPages.toString());
+      handlePageChange(totalPages);
+    } else {
+      handlePageChange(page);
+    }
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -1171,10 +1192,43 @@ export function FamilyMembersTable({
 
       {/* 分页 */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 sm:gap-0">
-        <p className="text-sm text-muted-foreground">
-          共 {totalCount} 条记录，第 {currentPage} / {totalPages || 1} 页
-        </p>
         <div className="flex items-center gap-2">
+          <p className="text-sm text-muted-foreground">
+            共 {totalCount} 条记录，第 {currentPage} / {totalPages || 1} 页
+          </p>
+          <div className="flex items-center gap-1 ml-2">
+            <span className="text-sm text-muted-foreground">跳至</span>
+            <Input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={jumpPage}
+              onChange={(e) => setJumpPage(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleJump()}
+              className="w-16 h-8 text-center"
+            />
+            <span className="text-sm text-muted-foreground">页</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleJump}
+              disabled={isPending}
+              className="h-8 px-2"
+            >
+              确定
+            </Button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handlePageChange(1)}
+            disabled={currentPage <= 1 || isPending}
+            title="首页"
+          >
+            <ChevronsLeft className="h-4 w-4" />
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1192,6 +1246,15 @@ export function FamilyMembersTable({
           >
             下一页
             <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handlePageChange(totalPages)}
+            disabled={currentPage >= totalPages || isPending}
+            title="尾页"
+          >
+            <ChevronsRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
