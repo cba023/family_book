@@ -877,7 +877,6 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
                         >
                           <span className="font-medium">{member.name}</span>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            {member.generation && <span>第{member.generation}世</span>}
                             {member.father_id && (
                               <span className="truncate max-w-[80px]">
                                 (父: {initialData.find(m => m.id === member.father_id)?.name || "未知"})

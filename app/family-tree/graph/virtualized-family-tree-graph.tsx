@@ -244,7 +244,7 @@ function getIncrementalLayout(
     newPositions.set(member.id, { x, y });
 
     if (member.generation) {
-      const label = `第${toChineseNum(member.generation)}世`;
+      const label = toChineseNum(member.generation);
       const current = generationYRange.get(member.generation);
       if (current) {
         current.minY = Math.min(current.minY, nodeWithPosition.y);
@@ -432,7 +432,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
     nodes.forEach((node) => {
       const data = node.data as FamilyNodeData;
       if (data?.generation) {
-        const label = `第${toChineseNum(data.generation)}世`;
+        const label = toChineseNum(data.generation);
         const y = node.position.y;
         const current = rangeMap.get(data.generation);
         if (current) {
@@ -843,8 +843,13 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
   return (
     <div
       ref={containerRef}
-      className="w-full h-[calc(100vh-200px)] min-h-[500px] border rounded-lg bg-background relative"
+      className="w-full h-[calc(100vh-200px)] min-h-[500px] border rounded-lg bg-background relative flex"
     >
+      {/* 世代标尺 - 画布左侧外部 */}
+      <div className="w-6 flex-shrink-0 border-r border-border bg-muted/30">
+        <GenerationRuler generationYRange={generationYRange} viewport={viewport} />
+      </div>
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -930,7 +935,6 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
                         >
                           <span className="font-medium">{member.name}</span>
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            {member.generation && <span>第{member.generation}世</span>}
                             {member.father_id && (
                               <span className="truncate max-w-[80px]">
                                 (父: {initialData.find((m) => m.id === member.father_id)?.name || "未知"})
@@ -1046,9 +1050,6 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
           </span>
         </Panel>
       </ReactFlow>
-
-      {/* 世代标尺 - 在 ReactFlow 外部 */}
-      <GenerationRuler generationYRange={generationYRange} viewport={viewport} />
     </div>
   );
 });
@@ -1132,23 +1133,7 @@ const GenerationRuler = memo(function GenerationRuler({
   const sortedGenerations = Array.from(generationYRange.entries()).sort((a, b) => a[0] - b[0]);
 
   return (
-    <div
-      className="absolute left-0 top-0 h-full pointer-events-none z-20 overflow-hidden"
-      style={{ width: RULER_WIDTH }}
-    >
-      {/* 标尺背景 */}
-      <div
-        className="absolute left-0 top-0 h-full bg-background/95"
-        style={{ width: RULER_LABEL_WIDTH }}
-      />
-
-      {/* 垂直分隔线 */}
-      <div
-        className="absolute top-0 right-0 h-full border-r border-border"
-        style={{ width: 1 }}
-      />
-
-      {/* 世代标记 */}
+    <div className="relative h-full w-full overflow-hidden">
       {sortedGenerations.map(([generation, { minY, maxY, label }]) => {
         const centerY = minY + (maxY - minY) / 2;
         const topY = minY;
@@ -1157,64 +1142,18 @@ const GenerationRuler = memo(function GenerationRuler({
         return (
           <div
             key={generation}
-            className="absolute left-0"
+            className="absolute left-0 right-0 flex justify-center"
             style={{
               top: centerY * viewport.zoom + viewport.y,
               transform: 'translateY(-50%)',
-              width: RULER_WIDTH,
+              height: (bottomY - topY) * viewport.zoom,
             }}
           >
-            {/* 世代区域背景 */}
-            <div
-              className="absolute left-0 bg-accent/10 rounded-sm"
-              style={{
-                top: '50%',
-                transform: 'translateY(-50%)',
-                width: RULER_LABEL_WIDTH,
-                height: (bottomY - topY) * viewport.zoom,
-              }}
-            />
-
-            {/* 刻度线和标签组 */}
-            <div className="relative" style={{ width: RULER_WIDTH, height: 0 }}>
-              {/* 刻度线 */}
-              <div
-                className="absolute bg-border"
-                style={{
-                  right: 0,
-                  top: -RULER_TICK_HEIGHT / 2,
-                  width: RULER_TICK_HEIGHT,
-                  height: 1,
-                }}
-              />
-
-              {/* 世代标签 */}
-              <div
-                className="absolute right-0 flex items-center justify-end pr-2"
-                style={{
-                  top: 0,
-                  height: 24,
-                  transform: 'translateY(-50%)',
-                }}
-              >
-                <span className="text-sm font-semibold text-foreground/80 whitespace-nowrap">
-                  {label}
-                </span>
-              </div>
-            </div>
-
-            {/* 水平参考线 */}
-            <div
-              className="absolute left-0 border-t border-border/40"
-              style={{
-                top: '50%',
-                right: -1000,
-                borderStyle: 'dashed',
-              }}
-            />
+            <span className="font-medium text-foreground/70 text-[10px]">{label}</span>
           </div>
         );
       })}
     </div>
   );
 });
+
