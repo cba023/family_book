@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     // 生成唯一文件名
     const timestamp = Date.now();
     const randomStr = Math.random().toString(36).substring(2, 8);
-    const ext = path.extname(file.name) || ".jpg";
+    const ext = path.extname(file.name)?.toLowerCase() || ".jpg";
     const filename = `${timestamp}-${randomStr}${ext}`;
 
     // 读取文件内容
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (!seaweedResponse.ok) {
       console.error("SeaweedFS upload failed:", await seaweedResponse.text());
       return NextResponse.json(
-        { error: "上传失败" },
+        { error: "上传失败，请检查 SeaweedFS 服务是否正常运行" },
         { status: 500 }
       );
     }
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json(
-      { error: "上传失败" },
+      { error: "上传失败，请检查网络连接" },
       { status: 500 }
     );
   }

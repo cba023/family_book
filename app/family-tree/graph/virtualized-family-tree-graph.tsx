@@ -1131,10 +1131,6 @@ const GenerationRuler = memo(function GenerationRuler({
 
   const sortedGenerations = Array.from(generationYRange.entries()).sort((a, b) => a[0] - b[0]);
 
-  // 计算视口内可见的世代
-  const viewportTop = -viewport.y / viewport.zoom;
-  const viewportBottom = (viewportTop + window.innerHeight) / viewport.zoom;
-
   return (
     <div
       className="absolute left-0 top-0 h-full pointer-events-none z-20 overflow-hidden"
