@@ -55,7 +55,6 @@ import { toChineseNum } from "./utils/chinese-num";
 import { getBranchBaseColor, generateBranchColor, type HSLColor } from "./utils/colors";
 import { FlowingEdge } from "./flowing-edge";
 import type { FamilyMemberNode } from "./actions";
-import dagre from "@dagrejs/dagre";
 import { MemberDetailDialog } from "../member-detail-dialog";
 
 // 防抖函数
@@ -86,10 +85,11 @@ interface VirtualizedFamilyTreeGraphProps {
 }
 
 // 布局常量
-const NODE_WIDTH = 160;
-const NODE_HEIGHT = 120;
-const HORIZONTAL_GAP = 80;
-const VERTICAL_GAP = 120;
+const NODE_WIDTH = 44;
+const NODE_WIDTH_TINY = 28; // 没有后代的节点使用更小的宽度
+const NODE_HEIGHT = 50;
+const HORIZONTAL_GAP = 12; // 亲兄弟姐妹间距
+const VERTICAL_GAP = 120; // 代际间距
 
 // 可视区域缓冲区（额外渲染的代数）
 const VISIBLE_GENERATION_BUFFER = 1;
@@ -180,34 +180,105 @@ function getIncrementalLayout(
     }
   }
 
-  // 准备 dagre 图
-  const dagreGraph = new dagre.graphlib.Graph();
-  dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({
-    rankdir: "TB",
-    nodesep: HORIZONTAL_GAP,
-    ranksep: VERTICAL_GAP,
+  // ========== 手动布局：父亲位于子女中心，同辈有最小间距 ==========
+  const getNodeWidth = (id: number): number => {
+    const hasChildren = (childrenMap.get(id)?.length || 0) > 0;
+    const isCollapsed = collapsedIds.has(id);
+    return (hasChildren && !isCollapsed) ? NODE_WIDTH : NODE_WIDTH_TINY;
+  };
+
+  // 第一遍：计算每个节点的子树宽度
+  const subtreeWidth = new Map<number, number>();
+  const sortedByGenDesc = [...visibleMembers].sort((a, b) => (b.generation || 1) - (a.generation || 1));
+  
+  sortedByGenDesc.forEach(member => {
+    const children = childrenMap.get(member.id) || [];
+    const visibleChildren = children.filter(cid => 
+      visibleMembers.some(m => m.id === cid) && !collapsedIds.has(member.id)
+    );
+    
+    if (visibleChildren.length === 0) {
+      subtreeWidth.set(member.id, getNodeWidth(member.id));
+    } else {
+      const childrenWidth = visibleChildren.reduce((sum, cid) => sum + subtreeWidth.get(cid)!, 0);
+      const gaps = (visibleChildren.length - 1) * HORIZONTAL_GAP;
+      subtreeWidth.set(member.id, Math.max(getNodeWidth(member.id), childrenWidth + gaps));
+    }
   });
 
-  // 构建节点和边
-  const edges: Edge[] = [];
+  // 第二遍：布局 - 用递归方式，父亲位于子女中心
   const newPositions = new Map<number, { x: number; y: number }>();
 
-  // 添加节点到 dagre
-  visibleMembers.forEach((member) => {
-    dagreGraph.setNode(String(member.id), {
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
+  // 布局一个子树
+  function layoutSubtree(member: FamilyMemberNode, centerX: number): void {
+    const gen = member.generation || 1;
+    const nodeWidth = getNodeWidth(member.id);
+    
+    newPositions.set(member.id, {
+      x: centerX - nodeWidth / 2,
+      y: (gen - rootGeneration) * VERTICAL_GAP,
     });
+
+    // 如果没有展开的孩子，直接返回
+    if (collapsedIds.has(member.id)) return;
+    
+    const children = childrenMap.get(member.id) || [];
+    const visibleChildren = children.filter(cid => 
+      visibleMembers.some(m => m.id === cid)
+    );
+    
+    if (visibleChildren.length === 0) return;
+
+    // 计算所有孩子的总宽度
+    const totalChildrenWidth = visibleChildren.reduce((sum, cid) => sum + subtreeWidth.get(cid)!, 0);
+    const gaps = (visibleChildren.length - 1) * HORIZONTAL_GAP;
+    
+    // 孩子们的最左边
+    let childLeft = centerX - totalChildrenWidth / 2 - (gaps / 2);
+    
+    // 布局每个孩子
+    visibleChildren.forEach(childId => {
+      const childWidth = subtreeWidth.get(childId)!;
+      const childCenterX = childLeft + childWidth / 2;
+      const child = visibleMembers.find(m => m.id === childId)!;
+      layoutSubtree(child, childCenterX);
+      childLeft += childWidth + HORIZONTAL_GAP;
+    });
+  }
+
+  // 布局所有根节点
+  roots.forEach((root, index) => {
+    // 计算这个根节点下所有后代的总宽度
+    const descendants: number[] = [];
+    const queue = [root.id];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      descendants.push(id);
+      const children = childrenMap.get(id) || [];
+      children.forEach(cid => {
+        if (visibleMembers.some(m => m.id === cid) && !collapsedIds.has(id)) {
+          queue.push(cid);
+        }
+      });
+    }
+    
+    // 找到这个根的后代中最大的世代
+    const maxGen = descendants.reduce((max, id) => {
+      const m = visibleMembers.find(pm => pm.id === id);
+      return Math.max(max, m?.generation || 1);
+    }, 1);
+    
+    // 每个根节点独占一行（同一世代的不同根之间有间距）
+    const rootX = index * 200; // 不同根之间间距
+    layoutSubtree(root, rootX);
   });
 
-  // 添加边
+  // 构建边（只在父子都在可见列表中时）
+  const edges: Edge[] = [];
   visibleMembers.forEach((member) => {
     if (member.father_id) {
       const fatherExists = visibleMembers.some((m) => m.id === member.father_id);
       if (fatherExists) {
-        dagreGraph.setEdge(String(member.father_id), String(member.id));
-
         const baseColor = memberBaseColorMap.get(member.id);
         const edgeColor = baseColor
           ? generateBranchColor(baseColor, 0)
@@ -229,31 +300,30 @@ function getIncrementalLayout(
     }
   });
 
-  // 计算布局
-  dagre.layout(dagreGraph);
-
   // 转换为节点，同时记录每个世代的Y范围
   let minX = Infinity;
   const generationYRange = new Map<number, { minY: number; maxY: number; count: number; label: string }>();
   visibleMembers.forEach((member) => {
-    const nodeWithPosition = dagreGraph.node(String(member.id));
-    const x = nodeWithPosition.x - NODE_WIDTH / 2;
-    const y = nodeWithPosition.y - NODE_HEIGHT / 2;
+    const pos = newPositions.get(member.id)!;
+    const hasChildren = (childrenMap.get(member.id)?.length || 0) > 0;
+    const isCollapsed = collapsedIds.has(member.id);
+    const nodeWidth = getNodeWidth(member.id);
+    const nodeHeight = NODE_HEIGHT;
 
-    if (x < minX) minX = x;
-    newPositions.set(member.id, { x, y });
+    if (pos.x < minX) minX = pos.x;
 
     if (member.generation) {
       const label = toChineseNum(member.generation);
       const current = generationYRange.get(member.generation);
+      const centerY = pos.y + nodeHeight / 2;
       if (current) {
-        current.minY = Math.min(current.minY, nodeWithPosition.y);
-        current.maxY = Math.max(current.maxY, nodeWithPosition.y);
+        current.minY = Math.min(current.minY, centerY);
+        current.maxY = Math.max(current.maxY, centerY);
         current.count++;
       } else {
         generationYRange.set(member.generation, {
-          minY: nodeWithPosition.y,
-          maxY: nodeWithPosition.y,
+          minY: centerY,
+          maxY: centerY,
           count: 1,
           label,
         });

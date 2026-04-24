@@ -79,11 +79,12 @@ interface FamilyTreeGraphInnerProps {
 
 // 布局常量
 const NODE_WIDTH = 160;
+const NODE_WIDTH_TINY = 28; // 没有后代的节点使用更小的宽度
 const NODE_HEIGHT = 120; // 增加高度以容纳配偶信息
-const HORIZONTAL_GAP = 80;
-const VERTICAL_GAP = 120;
+const SIBLING_GAP = 40; // 亲兄弟姐妹间距
+const BRANCH_GAP = 80; // 不同父系分支间距（宽松）
 
-// 使用 dagre 进行自动布局，避免连线交叉
+// 手动布局：按父系分支分组，同父的紧密，不同父的有间距
 function getLayoutedElements(
   members: FamilyMemberNode[],
   childrenMap: Map<number, number[]>,
@@ -96,97 +97,156 @@ function getLayoutedElements(
     return { nodes: [], edges: [] };
   }
 
-  // 1. 确定可见节点
-  const visibleMembers: FamilyMemberNode[] = [];
   const memberMap = new Map(members.map((m) => [m.id, m]));
-
-  // 找到根节点（没有父亲，或父亲不在当前列表中）
   const roots = members.filter(
     (m) => !m.father_id || !memberMap.has(m.father_id)
   );
-
-  // 获取根节点的代数，用于计算相对代数偏移量
   const rootGeneration = roots.length > 0 ? (roots[0].generation || 1) : 1;
 
-  // 2. 计算支系颜色
-  // 逻辑：找到根节点的直接子节点（各大房头），分配颜色，并传递给后代
-  // 存储的是 HSL 对象，方便后续计算梯度
+  // 计算支系颜色
   const memberBaseColorMap = new Map<number, HSLColor>();
-
-  // 辅助函数：递归设置颜色
   const setDescendantColors = (memberId: number, color: HSLColor) => {
     memberBaseColorMap.set(memberId, color);
     const children = childrenMap.get(memberId) || [];
-    children.forEach(childId => {
+    children.forEach((childId) => {
       if (!memberBaseColorMap.has(childId)) {
         setDescendantColors(childId, color);
       }
     });
   };
-
-  // 遍历所有根节点
-  roots.forEach(root => {
+  roots.forEach((root, index) => {
     const children = childrenMap.get(root.id) || [];
-    children.forEach((childId, index) => {
+    children.forEach((childId) => {
       const baseColor = getBranchBaseColor(index);
       setDescendantColors(childId, baseColor);
     });
   });
 
-  // BFS 遍历生成可见列表
+  // BFS 生成可见列表
+  const visibleMembers: FamilyMemberNode[] = [];
   const queue = [...roots];
   const visited = new Set<number>();
-
   while (queue.length > 0) {
     const member = queue.shift()!;
     if (visited.has(member.id)) continue;
-
     visited.add(member.id);
     visibleMembers.push(member);
-
-    // 如果未折叠，则添加子节点
     if (!collapsedIds.has(member.id)) {
       const childIds = childrenMap.get(member.id) || [];
       childIds.forEach((childId) => {
         const child = memberMap.get(childId);
-        if (child) {
-          queue.push(child);
-        }
+        if (child) queue.push(child);
       });
     }
   }
 
-  // 3. 创建 dagre 图
-  const dagreGraph = new dagre.graphlib.Graph();
-  dagreGraph.setDefaultEdgeLabel(() => ({}));
-  dagreGraph.setGraph({
-    rankdir: "TB", // 从上到下布局
-    nodesep: HORIZONTAL_GAP, // 同层节点间距
-    ranksep: VERTICAL_GAP, // 层间距
-    // align: "UL", // Removed this to enable center balancing
+  // 位置映射
+  const positions = new Map<number, { x: number; y: number }>();
+
+  // 计算单个节点的宽度
+  const getNodeWidth = (id: number): number => {
+    const hasChildren = (childrenMap.get(id)?.length || 0) > 0;
+    const isCollapsed = collapsedIds.has(id);
+    return (hasChildren && !isCollapsed) ? NODE_WIDTH : NODE_WIDTH_TINY;
+  };
+
+  // 找到某个成员的"父系根源"——即他所属的房头（根节点的直接子节点）
+  // 所有拥有相同房头的成员属于同一个"支系"
+  const getBranchRoot = (member: FamilyMemberNode): number | null => {
+    let current = member;
+    const visited = new Set<number>();
+
+    while (current.father_id) {
+      if (visited.has(current.father_id)) break; // 防止循环
+      visited.add(current.id);
+
+      const father = memberMap.get(current.father_id);
+      if (!father) break;
+
+      // 如果父亲是根节点的直接子节点，那这就是房头
+      if (roots.some(r => r.id === father.id)) {
+        return father.id;
+      }
+
+      current = father;
+    }
+
+    // 如果没有找到房头，返回父亲ID（可能是独立的）
+    return current.father_id;
+  };
+
+  // 按代布局：同代的按"支系"分组
+  // 同一个支系（同房头）的成员紧密排列，不同支系之间有间距
+  const generationGroups = new Map<number, { branchRoot: number | null; members: FamilyMemberNode[] }[]>();
+
+  visibleMembers.forEach(member => {
+    const gen = member.generation || 1;
+    if (!generationGroups.has(gen)) {
+      generationGroups.set(gen, []);
+    }
+    const groups = generationGroups.get(gen)!;
+
+    // 找到成员的支系根源
+    const branchRoot = getBranchRoot(member);
+
+    // 找到这个成员属于哪个组
+    let group = groups.find(g => g.branchRoot === branchRoot);
+    if (!group) {
+      group = { branchRoot, members: [] };
+      groups.push(group);
+    }
+    group.members.push(member);
   });
 
-  // 添加可见节点到 dagre 图
-  visibleMembers.forEach((member) => {
-    dagreGraph.setNode(String(member.id), {
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
+  // 第三步：布局每一代
+  const sortedGenerations = Array.from(generationGroups.keys()).sort((a, b) => a - b);
+
+  sortedGenerations.forEach(gen => {
+    const groups = generationGroups.get(gen)!;
+    let currentX = 0;
+
+    groups.forEach((group, groupIndex) => {
+      // 布局这个组的所有成员
+      group.members.forEach((member, memberIndex) => {
+        const nodeWidth = getNodeWidth(member.id);
+        positions.set(member.id, {
+          x: currentX + nodeWidth / 2,
+          y: (gen - rootGeneration) * VERTICAL_GAP,
+        });
+        currentX += nodeWidth;
+        if (memberIndex < group.members.length - 1) {
+          currentX += SIBLING_GAP; // 同支系紧密
+        }
+      });
+
+      // 不同支系之间有间距
+      if (groupIndex < groups.length - 1) {
+        currentX += BRANCH_GAP;
+      }
     });
   });
 
-  // 添加可见边到 dagre 图
+  // 转换为中心点到左上角
+  visibleMembers.forEach(member => {
+    const pos = positions.get(member.id);
+    if (pos) {
+      const nodeWidth = getNodeWidth(member.id);
+      positions.set(member.id, {
+        x: pos.x - nodeWidth / 2,
+        y: pos.y - NODE_HEIGHT / 2,
+      });
+    }
+  });
+
+  // 生成边
   const edges: Edge[] = [];
   visibleMembers.forEach((member) => {
     if (member.father_id) {
-      // 确保父节点也在可见列表中
       const fatherExists = visibleMembers.some((m) => m.id === member.father_id);
       if (fatherExists) {
-        dagreGraph.setEdge(String(member.father_id), String(member.id));
-
-        // 获取连线颜色：使用支系的【基准色】（最深色），作为树干颜色
         const baseColor = memberBaseColorMap.get(member.id);
         const edgeColor = baseColor
-          ? generateBranchColor(baseColor, 0) // 始终使用第0级（最深）颜色
+          ? generateBranchColor(baseColor, 0)
           : "hsl(var(--muted-foreground))";
 
         edges.push({
@@ -198,44 +258,34 @@ function getLayoutedElements(
           style: {
             stroke: edgeColor,
             strokeWidth: 2,
-            opacity: 0.6 // 稍微降低透明度，让文字更突出
+            opacity: 0.6,
           },
         });
       }
     }
   });
 
-  // 计算布局
-  dagre.layout(dagreGraph);
-
-  // 4. 转换为 React Flow 节点
+  // 生成节点
   let minX = Infinity;
   const generationYMap = new Map<number, { totalY: number; count: number }>();
 
   const memberNodes: Node[] = visibleMembers.map((member) => {
-    const nodeWithPosition = dagreGraph.node(String(member.id));
+    const pos = positions.get(member.id) || { x: 0, y: 0 };
     const hasChildren = (childrenMap.get(member.id)?.length || 0) > 0;
+    const isCollapsed = collapsedIds.has(member.id);
+    const nodeWidth = getNodeWidth(member.id);
 
-    // 计算左上角位置
-    const x = nodeWithPosition.x - NODE_WIDTH / 2;
-    const y = nodeWithPosition.y - NODE_HEIGHT / 2;
+    if (pos.x < minX) minX = pos.x;
 
-    // 更新全局 minX
-    if (x < minX) minX = x;
-
-    // 收集世代 Y 坐标信息
     if (member.generation) {
       const current = generationYMap.get(member.generation) || { totalY: 0, count: 0 };
       generationYMap.set(member.generation, {
-        totalY: current.totalY + nodeWithPosition.y,
-        count: current.count + 1
+        totalY: current.totalY + pos.y + NODE_HEIGHT / 2,
+        count: current.count + 1,
       });
     }
 
-    // 计算特定节点的渐变颜色
     const baseColor = memberBaseColorMap.get(member.id);
-    // 代数偏移量：当前代数 - (根节点代数 + 1)。这样根节点的儿子(房头)偏移为0，也就是最深色。
-    // 如果 member.generation 为 null，默认给 0
     const genOffset = (member.generation || rootGeneration) - (rootGeneration + 1);
     const nodeColor = baseColor
       ? generateBranchColor(baseColor, Math.max(0, genOffset))
@@ -245,28 +295,26 @@ function getLayoutedElements(
       ...member,
       isHighlighted: member.id === highlightedId,
       hasChildren,
-      collapsed: collapsedIds.has(member.id),
+      collapsed: isCollapsed,
       onToggleCollapse,
       onSpouseClick,
-      branchColor: nodeColor, // 传递计算后的具体颜色
+      branchColor: nodeColor,
     };
 
     return {
       id: String(member.id),
       type: "familyMember",
-      position: { x, y },
+      position: { x: pos.x, y: pos.y },
       data: nodeData,
     };
   });
 
-  // 5. 生成世代标尺节点
+  // 生成世代标尺
   const generationNodes: Node[] = [];
-  // 标尺 X 坐标：在最左侧节点的基础上再向左偏移
   const labelX = minX - 140;
 
   generationYMap.forEach(({ totalY, count }, generation) => {
     const avgY = totalY / count;
-    // 调整 Y 坐标使其垂直居中
     const labelY = avgY - 40;
 
     generationNodes.push({
@@ -275,11 +323,11 @@ function getLayoutedElements(
       position: { x: labelX, y: labelY },
       data: {
         generation,
-        label: `第${toChineseNum(generation)}世`
+        label: `第${toChineseNum(generation)}世`,
       },
       draggable: false,
       selectable: false,
-      zIndex: -1, // 放在底层
+      zIndex: -1,
     });
   });
 
