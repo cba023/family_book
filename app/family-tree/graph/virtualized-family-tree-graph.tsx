@@ -19,6 +19,7 @@ import {
   getViewportForBounds,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { hierarchy, tree, type HierarchyPointNode } from "d3-hierarchy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -122,15 +123,15 @@ const RULER_TICK_HEIGHT = 8;
 const RULER_LABEL_WIDTH = 40;
 
 /**
- * 增量布局计算 - 只重算变化的子树
+ * 增量布局计算 - 使用 d3-hierarchy 树布局
  */
 function getIncrementalLayout(
   allMembers: FamilyMemberNode[],
   childrenMap: Map<number, number[]>,
   collapsedIds: Set<number>,
-  changedIds: Set<number>, // 折叠状态改变的节点ID
+  changedIds: Set<number>,
   layoutCache: CachedLayout | null,
-  visibleGenerations: number, // 可见代数限制
+  visibleGenerations: number,
   onToggleCollapse?: (id: number) => void
 ): { nodes: Node[]; edges: Edge[]; cache: CachedLayout } {
   const memberMap = new Map(allMembers.map((m) => [m.id, m]));
@@ -195,140 +196,67 @@ function getIncrementalLayout(
     }
   }
 
-  // ========== 手动布局：父亲位于子女中心，同辈有最小间距 ==========
-  const getNodeWidth = (id: number): number => {
-    const hasChildren = (childrenMap.get(id)?.length || 0) > 0;
-    const isCollapsed = collapsedIds.has(id);
-    return (hasChildren && !isCollapsed) ? NODE_WIDTH : NODE_WIDTH_TINY;
-  };
+  // 构建树形结构
+  interface TreeNode {
+    id: number;
+    data: FamilyMemberNode;
+    children?: TreeNode[];
+  }
 
-  // 第一遍：计算每个节点的子树宽度
-  const subtreeWidth = new Map<number, number>();
-  const sortedByGenDesc = [...visibleMembers].sort((a, b) => (b.generation || 1) - (a.generation || 1));
-  
-  sortedByGenDesc.forEach(member => {
-    const children = childrenMap.get(member.id) || [];
-    const visibleChildren = children.filter(cid => 
-      visibleMembers.some(m => m.id === cid) && !collapsedIds.has(member.id)
-    );
-    
-    if (visibleChildren.length === 0) {
-      subtreeWidth.set(member.id, getNodeWidth(member.id));
-    } else {
-      const childrenWidth = visibleChildren.reduce((sum, cid) => sum + subtreeWidth.get(cid)!, 0);
-      const gaps = (visibleChildren.length - 1) * HORIZONTAL_GAP;
-      subtreeWidth.set(member.id, Math.max(getNodeWidth(member.id), childrenWidth + gaps));
-    }
+  // 收集每个节点的所有可见子女（存储成员对象）
+  const nodeChildren = new Map<number, FamilyMemberNode[]>();
+
+  visibleMembers.forEach(member => {
+    const allChildren = childrenMap.get(member.id) || [];
+    const visibleChildren = allChildren
+      .map(cid => visibleMembers.find(m => m.id === cid))
+      .filter((m): m is FamilyMemberNode => m !== undefined)
+      .filter(() => !collapsedIds.has(member.id));
+    nodeChildren.set(member.id, visibleChildren);
   });
 
-  // 第二遍：布局 - 用递归方式，父亲位于子女中心
+  // 递归构建树
+  function buildTree(member: FamilyMemberNode): TreeNode {
+    const children = nodeChildren.get(member.id) || [];
+    return {
+      id: member.id,
+      data: member,
+      children: children.length > 0 ? children.map(c => buildTree(c)) : undefined,
+    };
+  }
+
+  // 创建布局
+  // tree() 的 x 是水平方向（兄弟从左到右），y 是垂直方向（代际从上到下）
+  // nodeSize([y间距, x间距]) - 垂直间距大一些
+  const treeLayout = tree<TreeNode>()
+    .nodeSize([NODE_WIDTH, VERTICAL_GAP])  // [x间距(兄弟), y间距(代际)]
+    .separation((a, b) => a.parent === b.parent ? 1 : 1.2);
+
+  // 构建根节点（处理多个根）
+  let rootNode: TreeNode;
+  if (roots.length === 1) {
+    rootNode = buildTree(roots[0]);
+  } else {
+    // 多个根用虚拟根包裹
+    rootNode = {
+      id: -1,
+      data: null as any,
+      children: roots.map(r => buildTree(r)),
+    };
+  }
+
+  // 计算布局
+  const d3Root = hierarchy(rootNode);
+  treeLayout(d3Root);
+
+  // 提取位置
   const newPositions = new Map<number, { x: number; y: number }>();
 
-  // 布局一个子树
-  function layoutSubtree(member: FamilyMemberNode, centerX: number): void {
-    const gen = member.generation || 1;
-    const nodeWidth = getNodeWidth(member.id);
-    
-    newPositions.set(member.id, {
-      x: centerX - nodeWidth / 2,
-      y: (gen - rootGeneration) * VERTICAL_GAP,
-    });
-
-    // 如果没有展开的孩子，直接返回
-    if (collapsedIds.has(member.id)) return;
-    
-    const children = childrenMap.get(member.id) || [];
-    const visibleChildren = children.filter(cid => 
-      visibleMembers.some(m => m.id === cid)
-    );
-    
-    if (visibleChildren.length === 0) return;
-
-    // 如果只有一个孩子，让孩子直接位于父亲正下方（x坐标相同）
-    if (visibleChildren.length === 1) {
-      const childId = visibleChildren[0];
-      const child = visibleMembers.find(m => m.id === childId)!;
-      // 强制孩子使用与父亲相同的x坐标
-      const fatherX = newPositions.get(member.id)!.x;
-      newPositions.set(child.id, {
-        x: fatherX,
-        y: ((child.generation || 1) - rootGeneration) * VERTICAL_GAP,
-      });
-      // 递归布局孩子的后代
-      if (!collapsedIds.has(child.id)) {
-        layoutSingleChildSubtree(child);
-      }
-      return;
-    }
-
-    // 计算所有孩子的总宽度
-    const totalChildrenWidth = visibleChildren.reduce((sum, cid) => sum + subtreeWidth.get(cid)!, 0);
-    const gaps = (visibleChildren.length - 1) * HORIZONTAL_GAP;
-    
-    // 孩子们的最左边
-    let childLeft = centerX - totalChildrenWidth / 2 - (gaps / 2);
-    
-    // 布局每个孩子
-    visibleChildren.forEach(childId => {
-      const childWidth = subtreeWidth.get(childId)!;
-      const childCenterX = childLeft + childWidth / 2;
-      const child = visibleMembers.find(m => m.id === childId)!;
-      layoutSubtree(child, childCenterX);
-      childLeft += childWidth + HORIZONTAL_GAP;
-    });
-  }
-
-  // 递归布局单子女子树（所有后代都居中对齐）
-  function layoutSingleChildSubtree(member: FamilyMemberNode): void {
-    if (collapsedIds.has(member.id)) return;
-    
-    const children = childrenMap.get(member.id) || [];
-    const visibleChildren = children.filter(cid =>
-      visibleMembers.some(m => m.id === cid)
-    );
-
-    if (visibleChildren.length === 0) return;
-
-    if (visibleChildren.length === 1) {
-      const childId = visibleChildren[0];
-      const child = visibleMembers.find(m => m.id === childId)!;
-      const fatherX = newPositions.get(member.id)!.x;
-      newPositions.set(child.id, {
-        x: fatherX,
-        y: ((child.generation || 1) - rootGeneration) * VERTICAL_GAP,
-      });
-      layoutSingleChildSubtree(child);
-    } else {
-      // 有多个孩子了，切换到正常布局
-      layoutSubtree(member, newPositions.get(member.id)!.x + getNodeWidth(member.id) / 2);
-    }
-  }
-
-  // 布局所有根节点
-  roots.forEach((root, index) => {
-    // 计算这个根节点下所有后代的总宽度
-    const descendants: number[] = [];
-    const queue = [root.id];
-    while (queue.length > 0) {
-      const id = queue.shift()!;
-      descendants.push(id);
-      const children = childrenMap.get(id) || [];
-      children.forEach(cid => {
-        if (visibleMembers.some(m => m.id === cid) && !collapsedIds.has(id)) {
-          queue.push(cid);
-        }
-      });
-    }
-    
-    // 找到这个根的后代中最大的世代
-    const maxGen = descendants.reduce((max, id) => {
-      const m = visibleMembers.find(pm => pm.id === id);
-      return Math.max(max, m?.generation || 1);
-    }, 1);
-    
-    // 每个根节点独占一行（同一世代的不同根之间有间距）
-    const rootX = index * 200; // 不同根之间间距
-    layoutSubtree(root, rootX);
+  d3Root.each((node) => {
+    if (node.data.id === -1) return; // 跳过虚拟根
+    const pointNode = node as HierarchyPointNode<TreeNode>;
+    // d3.tree: node.x 是水平方向（兄弟从左到右），node.y 是垂直方向（代际从上到下）
+    newPositions.set(pointNode.data.id, { x: pointNode.x, y: pointNode.y });
   });
 
   // 构建边（只在父子都在可见列表中时）
@@ -362,7 +290,7 @@ function getIncrementalLayout(
     const pos = newPositions.get(member.id)!;
     const hasChildren = (childrenMap.get(member.id)?.length || 0) > 0;
     const isCollapsed = collapsedIds.has(member.id);
-    const nodeWidth = getNodeWidth(member.id);
+    const nodeWidth = hasChildren && !isCollapsed ? NODE_WIDTH : NODE_WIDTH_TINY;
     const nodeHeight = NODE_HEIGHT;
 
     if (pos.x < minX) minX = pos.x;
