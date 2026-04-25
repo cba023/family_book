@@ -8,6 +8,7 @@ export type RuntimeConfigFile = {
   databaseUrl?: string;
   authSecret?: string;
   setupComplete?: boolean;
+  visibleGenerations?: number;
 };
 
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -48,6 +49,16 @@ export function getEffectiveAuthSecret(): string | undefined {
   const f = loadRuntimeConfig().authSecret?.trim();
   if (f && f.length >= 16) return f;
   return undefined;
+}
+
+export function getVisibleGenerations(): number {
+  const config = loadRuntimeConfig();
+  const env = process.env.DEFAULT_VISIBLE_GENERATIONS;
+  if (env) {
+    const parsed = parseInt(env, 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return config.visibleGenerations ?? 5;
 }
 
 export function generateAuthSecret(): string {

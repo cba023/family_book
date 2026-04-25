@@ -245,9 +245,7 @@ function getLayoutedElements(
       const fatherExists = visibleMembers.some((m) => m.id === member.father_id);
       if (fatherExists) {
         const baseColor = memberBaseColorMap.get(member.id);
-        const edgeColor = baseColor
-          ? generateBranchColor(baseColor, 0)
-          : "hsl(var(--muted-foreground))";
+        const edgeColor = "hsl(0, 0%, 75%)";
 
         edges.push({
           id: `e${member.father_id}-${member.id}`,
@@ -745,56 +743,11 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
 
     ctx.scale(2.0, 2.0);
 
-    // 3. 绘制背景
-    if (bgDataUrl) {
-      const bgImg = new Image();
-      bgImg.src = bgDataUrl;
-      await new Promise((resolve) => {
-        bgImg.onload = resolve;
-      });
+    // 白色背景
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, imageWidth, imageHeight);
 
-      // Cover 模式
-      const bgRatio = bgImg.width / bgImg.height;
-      const canvasRatio = imageWidth / imageHeight;
-      let drawW = imageWidth;
-      let drawH = imageHeight;
-      let offsetX = 0;
-      let offsetY = 0;
-
-      if (bgRatio > canvasRatio) {
-        drawH = imageHeight;
-        drawW = imageHeight * bgRatio;
-        offsetX = (imageWidth - drawW) / 2;
-      } else {
-        drawW = imageWidth;
-        drawH = imageWidth / bgRatio;
-        offsetY = (imageHeight - drawH) / 2;
-      }
-
-      ctx.drawImage(bgImg, offsetX, offsetY, drawW, drawH);
-    } else {
-      ctx.fillStyle = "#f9f5f0";
-      ctx.fillRect(0, 0, imageWidth, imageHeight);
-    }
-
-    // 4. 绘制水印 (平铺)
-    const watermarkText = userEmail || 'Liu Family';
-    ctx.save();
-    ctx.rotate(-30 * Math.PI / 180);
-    ctx.font = "16px sans-serif";
-    ctx.fillStyle = "rgba(0, 0, 0, 0.03)";
-    ctx.textAlign = "center";
-
-    const stepX = 200;
-    const stepY = 100;
-    for (let x = -imageWidth; x < imageWidth * 2; x += stepX) {
-      for (let y = -imageHeight; y < imageHeight * 2; y += stepY) {
-        ctx.fillText(watermarkText, x, y);
-      }
-    }
-    ctx.restore();
-
-    // 5. 生成族谱树的透明 PNG 并绘制
+    // 生成族谱树的透明 PNG 并绘制
     const treeDataUrl = await toPng(viewportElem, {
       width: imageWidth,
       height: imageHeight,
@@ -1002,7 +955,7 @@ const FamilyTreeGraphInner = memo(function FamilyTreeGraphInner({ initialData, o
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={onExpandAll}>
                   <ChevronsDown className="h-4 w-4 mr-2" />
-                  全部展开
+                  展开全部
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={toggleDraggable}>
                   {isDraggable ? (

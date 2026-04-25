@@ -799,3 +799,30 @@ export async function importFamilyMembersFromGedcom(gedcomContent: string): Prom
     };
   }
 }
+
+export async function getVisibleGenerationsSetting(): Promise<number> {
+  const { getVisibleGenerations } = await import("@/lib/runtime-config");
+  return getVisibleGenerations();
+}
+
+export async function updateVisibleGenerationsSetting(
+  generations: number
+): Promise<{ success: boolean; error: string | null }> {
+  const { user, error: authError } = await requireAdmin();
+  if (!user) {
+    return { success: false, error: authError };
+  }
+
+  try {
+    const { saveRuntimeConfig } = await import("@/lib/runtime-config");
+    saveRuntimeConfig({ visibleGenerations: generations });
+    revalidatePath("/family-tree", "layout");
+    return { success: true, error: null };
+  } catch (error) {
+    console.error("Error updating visible generations setting:", error);
+    return {
+      success: false,
+      error: formatActionError(error),
+    };
+  }
+}

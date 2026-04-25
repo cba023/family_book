@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useState, useRef, useEffect, memo } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect, memo, useTransition, useDeferredValue } from "react";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   ReactFlow,
   Controls,
@@ -28,18 +29,28 @@ import {
   X,
   Download,
   ChevronsDown,
+  ChevronsUp,
   Lock,
   Unlock,
   MoreVertical,
   ChevronLeft,
   ChevronRight,
-  ChevronsUp,
   Users,
+  Home,
+  Loader2,
+  ZoomIn,
+  ZoomOut,
+  RotateCw,
+  Image,
+  FileCode,
+  FileJson,
+  FileText,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -48,7 +59,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { toPng } from "html-to-image";
+import { toPng, toSvg } from "html-to-image";
 import { FamilyMemberNodeType, type FamilyNodeData } from "./family-node";
 import { GenerationNodeType } from "./generation-node";
 import { toChineseNum } from "./utils/chinese-num";
@@ -56,6 +67,7 @@ import { getBranchBaseColor, generateBranchColor, type HSLColor } from "./utils/
 import { FlowingEdge } from "./flowing-edge";
 import type { FamilyMemberNode } from "./actions";
 import { MemberDetailDialog } from "../member-detail-dialog";
+import { FAMILY_SURNAME } from "@/lib/utils";
 
 // 防抖函数
 function debounce<T extends (...args: Parameters<T>) => void>(fn: T, ms: number): T {
@@ -80,6 +92,7 @@ interface VirtualizedFamilyTreeGraphProps {
   allData?: FamilyMemberNode[]; // 完整数据（用于搜索）
   totalGenerations?: number; // 总代数（用于加载更多）
   totalCount?: number; // 总成员数
+  visibleGenerations?: number; // 默认展开的代数
   onMemberClick?: (member: FamilyMemberNode) => void;
   onSpouseClick?: (spouseId: number) => void;
 }
@@ -117,6 +130,7 @@ function getIncrementalLayout(
   collapsedIds: Set<number>,
   changedIds: Set<number>, // 折叠状态改变的节点ID
   layoutCache: CachedLayout | null,
+  visibleGenerations: number, // 可见代数限制
   onToggleCollapse?: (id: number) => void
 ): { nodes: Node[]; edges: Edge[]; cache: CachedLayout } {
   const memberMap = new Map(allMembers.map((m) => [m.id, m]));
@@ -168,6 +182,7 @@ function getIncrementalLayout(
   while (queue.length > 0) {
     const member = queue.shift()!;
     if (visited.has(member.id)) continue;
+    
     visited.add(member.id);
     visibleMembers.push(member);
 
@@ -229,6 +244,23 @@ function getIncrementalLayout(
     
     if (visibleChildren.length === 0) return;
 
+    // 如果只有一个孩子，让孩子直接位于父亲正下方（x坐标相同）
+    if (visibleChildren.length === 1) {
+      const childId = visibleChildren[0];
+      const child = visibleMembers.find(m => m.id === childId)!;
+      // 强制孩子使用与父亲相同的x坐标
+      const fatherX = newPositions.get(member.id)!.x;
+      newPositions.set(child.id, {
+        x: fatherX,
+        y: ((child.generation || 1) - rootGeneration) * VERTICAL_GAP,
+      });
+      // 递归布局孩子的后代
+      if (!collapsedIds.has(child.id)) {
+        layoutSingleChildSubtree(child);
+      }
+      return;
+    }
+
     // 计算所有孩子的总宽度
     const totalChildrenWidth = visibleChildren.reduce((sum, cid) => sum + subtreeWidth.get(cid)!, 0);
     const gaps = (visibleChildren.length - 1) * HORIZONTAL_GAP;
@@ -244,6 +276,32 @@ function getIncrementalLayout(
       layoutSubtree(child, childCenterX);
       childLeft += childWidth + HORIZONTAL_GAP;
     });
+  }
+
+  // 递归布局单子女子树（所有后代都居中对齐）
+  function layoutSingleChildSubtree(member: FamilyMemberNode): void {
+    if (collapsedIds.has(member.id)) return;
+    
+    const children = childrenMap.get(member.id) || [];
+    const visibleChildren = children.filter(cid =>
+      visibleMembers.some(m => m.id === cid)
+    );
+
+    if (visibleChildren.length === 0) return;
+
+    if (visibleChildren.length === 1) {
+      const childId = visibleChildren[0];
+      const child = visibleMembers.find(m => m.id === childId)!;
+      const fatherX = newPositions.get(member.id)!.x;
+      newPositions.set(child.id, {
+        x: fatherX,
+        y: ((child.generation || 1) - rootGeneration) * VERTICAL_GAP,
+      });
+      layoutSingleChildSubtree(child);
+    } else {
+      // 有多个孩子了，切换到正常布局
+      layoutSubtree(member, newPositions.get(member.id)!.x + getNodeWidth(member.id) / 2);
+    }
   }
 
   // 布局所有根节点
@@ -279,10 +337,7 @@ function getIncrementalLayout(
     if (member.father_id) {
       const fatherExists = visibleMembers.some((m) => m.id === member.father_id);
       if (fatherExists) {
-        const baseColor = memberBaseColorMap.get(member.id);
-        const edgeColor = baseColor
-          ? generateBranchColor(baseColor, 0)
-          : "hsl(var(--muted-foreground))";
+        const edgeColor = "hsl(0, 0%, 75%)";
 
         edges.push({
           id: `e${member.father_id}-${member.id}`,
@@ -371,6 +426,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
   initialData,
   allData,
   totalCount,
+  visibleGenerations,
   onMemberClick,
   onSpouseClick,
 }: VirtualizedFamilyTreeGraphProps & { totalCount?: number }) {
@@ -390,19 +446,24 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
 
   // ReactFlow viewport 状态
   const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
-  
-  // 默认折叠超过5世的节点
+  const deferredViewport = useDeferredValue(viewport);
+
+  // 默认折叠超过配置代数的节点
+  const effectiveVisibleGenerations = visibleGenerations ?? DEFAULT_VISIBLE_GENERATIONS;
   const initialCollapsedIds = useMemo(() => {
     const collapsed = new Set<number>();
     initialData.forEach((m) => {
-      if (m.generation && m.generation > DEFAULT_VISIBLE_GENERATIONS) {
+      if (m.generation && m.generation > effectiveVisibleGenerations) {
         collapsed.add(m.id);
       }
     });
     return collapsed;
-  }, [initialData]);
+  }, [initialData, effectiveVisibleGenerations]);
   
   const [collapsedIds, setCollapsedIds] = useState<Set<number>>(initialCollapsedIds);
+  const [isPending, startTransition] = useTransition();
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
 
   // 布局缓存
   const layoutCacheRef = useRef<CachedLayout | null>(null);
@@ -462,18 +523,25 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
     setHighlightedPathIds(pathSet);
   }, [highlightedId, allMembersMap, childrenMap]);
 
-  // 折叠切换（触发增量布局）
+  // 折叠切换（收起/展开都收起子女）
   const onToggleCollapse = useCallback((id: number) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
+        // 收起节点
         next.delete(id);
-      } else {
-        next.add(id);
       }
+      // 收起所有直接子女
+      const children = childrenMap.get(id) || [];
+      children.forEach((childId) => next.add(childId));
       return next;
     });
-  }, []);
+  }, [childrenMap]);
+
+  // 计算根节点
+  const roots = useMemo(() => {
+    return (allData || initialData).filter((m) => !m.father_id || !allMembersMap.has(m.father_id));
+  }, [allData, initialData, allMembersMap]);
 
   // 增量布局计算
   const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
@@ -485,12 +553,13 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
       collapsedIds,
       changedIds,
       layoutCacheRef.current,
+      effectiveVisibleGenerations,
       onToggleCollapse
     );
     layoutCacheRef.current = cache;
 
     return { nodes, edges };
-  }, [initialData, childrenMap, collapsedIds]);
+  }, [initialData, childrenMap, collapsedIds, effectiveVisibleGenerations]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -529,6 +598,9 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
   useEffect(() => {
     setEdges(initialEdges);
   }, [initialEdges, setEdges]);
+
+  // 检测移动设备
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
   // 高亮效果更新（保持不变）
   useEffect(() => {
@@ -594,10 +666,17 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
     );
   }, [highlightedId, highlightedPathIds, setNodes, setEdges]);
 
-  // 展开所有
+  // 展开所有（使用 startTransition 保持 UI 响应）
   const onExpandAll = useCallback(() => {
-    setCollapsedIds(new Set());
+    startTransition(() => {
+      setCollapsedIds(new Set());
+    });
   }, []);
+
+  // 收起所有
+  const onCollapseAll = useCallback(() => {
+    setCollapsedIds(new Set([...initialData.map(m => m.id)]));
+  }, [initialData]);
 
   // 搜索（添加防抖）
   const debouncedSearch = useMemo(
@@ -781,121 +860,134 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
     };
   }, []);
 
-  const onDownload = useCallback(async () => {
-    const viewportElem = document.querySelector(".react-flow__viewport") as HTMLElement;
-    if (!viewportElem) return;
+  // 导出 JSON 数据
+  const onExportJson = useCallback(() => {
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      totalCount: nodes.length,
+      members: nodes.map(n => (n.data as FamilyNodeData).originalData || n.data),
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.setAttribute("download", `family-tree-data-${new Date().toISOString().split("T")[0]}.json`);
+    a.setAttribute("href", url);
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [nodes]);
 
-    const bounds = getNodesBounds(nodes);
-    const imageWidth = bounds.width + 300;
-    const imageHeight = bounds.height + 300;
+  // 导出 SVG (保持原样)
+  const onExportSvg = useCallback(() => {
+    startDownload(async () => {
+      const viewportElem = document.querySelector(".react-flow__viewport") as HTMLElement;
+      if (!viewportElem) return;
 
-    const transform = getViewportForBounds(
-      bounds,
-      imageWidth,
-      imageHeight,
-      0.1,
-      2,
-      0.15
-    );
+      const bounds = getNodesBounds(nodes);
+      const padding = 50;
+      const width = bounds.width + padding * 2;
+      const height = bounds.height + padding * 2;
 
-    let bgDataUrl = "";
-    try {
-      const response = await fetch("/images/login-bg.jpg");
-      if (response.ok) {
-        const blob = await response.blob();
-        bgDataUrl = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-      }
-    } catch (error) {
-      console.warn("Failed to load background image:", error);
-    }
-
-    const canvas = document.createElement("canvas");
-    canvas.width = imageWidth * 2.0;
-    canvas.height = imageHeight * 2.0;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.scale(2.0, 2.0);
-
-    if (bgDataUrl) {
-      const bgImg = new Image();
-      bgImg.src = bgDataUrl;
-      await new Promise((resolve) => {
-        bgImg.onload = resolve;
+      const svgDataUrl = await toSvg(viewportElem, {
+        width,
+        height,
+        backgroundColor: "#ffffff",
+        style: {
+          width: width.toString(),
+          height: height.toString(),
+          transform: `translate(${-bounds.x + padding}px, ${-bounds.y + padding}px) scale(1)`,
+          fontFamily: "system-ui, -apple-system, sans-serif",
+        },
+        cacheBust: true,
       });
 
-      const bgRatio = bgImg.width / bgImg.height;
-      const canvasRatio = imageWidth / imageHeight;
-      let drawW = imageWidth;
-      let drawH = imageHeight;
-      let offsetX = 0;
-      let offsetY = 0;
+      const blob = await fetch(svgDataUrl).then(r => r.blob());
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.setAttribute("download", `family-tree-${new Date().toISOString().split("T")[0]}.svg`);
+      a.setAttribute("href", url);
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }, [nodes]);
 
-      if (bgRatio > canvasRatio) {
-        drawH = imageHeight;
-        drawW = imageHeight * bgRatio;
-        offsetX = (imageWidth - drawW) / 2;
-      } else {
-        drawW = imageWidth;
-        drawH = imageWidth / bgRatio;
-        offsetY = (imageHeight - drawH) / 2;
-      }
-
-      ctx.drawImage(bgImg, offsetX, offsetY, drawW, drawH);
-    } else {
-      ctx.fillStyle = "#f9f5f0";
-      ctx.fillRect(0, 0, imageWidth, imageHeight);
-    }
-
-    const watermarkText = userEmail || "Liu Family";
-    ctx.save();
-    ctx.rotate(-30 * Math.PI / 180);
-    ctx.font = "16px sans-serif";
-    ctx.fillStyle = "rgba(0, 0, 0, 0.03)";
-    ctx.textAlign = "center";
-
-    const stepX = 200;
-    const stepY = 100;
-    for (let x = -imageWidth; x < imageWidth * 2; x += stepX) {
-      for (let y = -imageHeight; y < imageHeight * 2; y += stepY) {
-        ctx.fillText(watermarkText, x, y);
-      }
-    }
-    ctx.restore();
-
-    const treeDataUrl = await toPng(viewportElem, {
-      width: imageWidth,
-      height: imageHeight,
-      backgroundColor: null as any,
-      style: {
-        width: imageWidth.toString(),
-        height: imageHeight.toString(),
-        transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.zoom})`,
-        fontFamily: "system-ui, -apple-system, sans-serif",
-        backgroundColor: "transparent",
-      },
-      pixelRatio: 2.0,
-      cacheBust: true,
+  // 导出 Markdown (树形结构)
+  const onExportMarkdown = useCallback(() => {
+    const nodesData = nodes.map(n => n.data as FamilyNodeData);
+    
+    // 构建 id -> node 映射
+    const nodeMap = new Map<number, FamilyNodeData>();
+    nodesData.forEach(node => {
+      if (node.id) nodeMap.set(node.id, node);
     });
 
-    const treeImg = new Image();
-    treeImg.src = treeDataUrl;
-    await new Promise((resolve) => {
-      treeImg.onload = resolve;
-    });
+    // 查找根节点（没有父节点或父节点不在列表中的）
+    const rootNodes = nodesData.filter(node => 
+      !node.father_id || !nodeMap.has(node.father_id)
+    );
 
-    ctx.drawImage(treeImg, 0, 0, imageWidth, imageHeight);
+    // 按世代排序（祖先在前）
+    const sortedRoots = rootNodes.sort((a, b) => (a.generation ?? 0) - (b.generation ?? 0));
 
-    const finalDataUrl = canvas.toDataURL("image/jpeg", 0.85);
+    // 获取子女并按长房顺序排序
+    const getChildren = (parentId: number): FamilyNodeData[] => {
+      return nodesData
+        .filter(node => node.father_id === parentId)
+        .sort((a, b) => (a.sibling_order ?? 0) - (b.sibling_order ?? 0));
+    };
+
+    // 递归构建树形 Markdown
+    const buildTree = (members: FamilyNodeData[], indent: number): string => {
+      let md = "";
+      for (const member of members) {
+        const prefix = "  ".repeat(indent);
+        const spouse = member.spouse ? ` & ${member.spouse}` : "";
+        const birthDeath = [member.birthYear, member.deathYear].filter(Boolean).join(" - ");
+        const lifeInfo = birthDeath ? ` (${birthDeath})` : "";
+        
+        md += `${prefix}- ${member.name}${spouse}${lifeInfo}\n`;
+        
+        const children = getChildren(member.id);
+        if (children.length > 0) {
+          md += buildTree(children, indent + 1);
+        }
+      }
+      return md;
+    };
+
+    // 生成 Markdown
+    let md = `# ${FAMILY_SURNAME}氏世系图\n\n`;
+    md += `> 共 ${nodes.length} 位成员 | 导出日期: ${new Date().toLocaleDateString("zh-CN")}\n\n`;
+    md += "---\n\n";
+
+    md += buildTree(sortedRoots, 0);
+
+    md += "\n---\n\n";
+    md += `*由${FAMILY_SURNAME}氏族谱管理系统生成*\n`;
+
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.setAttribute("download", `family-tree-${new Date().toISOString().split("T")[0]}.jpg`);
-    a.setAttribute("href", finalDataUrl);
+    a.setAttribute("download", `family-tree-${new Date().toISOString().split("T")[0]}.md`);
+    a.setAttribute("href", url);
     a.click();
-  }, [nodes, userEmail]);
+    URL.revokeObjectURL(url);
+  }, [nodes]);
+
+
+  // 下载图片的异步处理
+  const startDownload = useCallback(async (fn: (setProgress: (current: number, total: number) => void) => Promise<void>) => {
+    setIsDownloading(true);
+    setDownloadProgress({ current: 0, total: 0 });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await fn((current, total) => setDownloadProgress({ current, total }));
+    } catch (error) {
+      console.error("下载图片失败:", error);
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress({ current: 0, total: 0 });
+    }
+  }, []);
 
   const toggleDraggable = useCallback(() => {
     setIsDraggable((prev) => !prev);
@@ -917,7 +1009,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
     >
       {/* 世代标尺 - 画布左侧外部 */}
       <div className="w-6 flex-shrink-0 border-r border-border bg-muted/30">
-        <GenerationRuler generationYRange={generationYRange} viewport={viewport} />
+        <GenerationRuler generationYRange={generationYRange} viewport={deferredViewport} />
       </div>
 
       <ReactFlow
@@ -946,7 +1038,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
       >
         <Controls
           showInteractive={false}
-          className="!bg-background !border !border-border !shadow-md [&>button]:!bg-background [&>button]:!border-border [&>button]:!text-foreground [&>button:hover]:!bg-muted [&>button>svg]:!fill-current"
+          className="!bg-background !border !border-border !shadow-md [&>button]:!bg-background [&>button]:!border-border [&>button]:!text-foreground [&>button:hover]:!bg-muted [&>button>svg]:!fill-current max-md:!hidden"
         />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
 
@@ -1039,17 +1131,6 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
             <Button
               size="sm"
               variant="outline"
-              onClick={onResetView}
-              title="重置视图"
-              className="bg-background/95 backdrop-blur-sm shadow-sm h-9 w-9 px-0 sm:w-auto sm:px-4"
-            >
-              <RotateCcw className="h-4 w-4 sm:mr-1" />
-              <span className="hidden sm:inline">重置</span>
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
               onClick={toggleFullscreen}
               title={isFullscreen ? "退出全屏" : "全屏"}
               className="bg-background/95 backdrop-blur-sm shadow-sm h-9 w-9 px-0 sm:w-auto sm:px-4"
@@ -1079,34 +1160,57 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onExpandAll}>
-                  <ChevronsDown className="h-4 w-4 mr-2" />
-                  全部展开
+                <DropdownMenuItem
+                  onClick={() => {
+                    const rootNode = nodes.find(n => n.id === String(roots[0]?.id));
+                    if (rootNode && reactFlowInstance) {
+                      reactFlowInstance.setCenter(rootNode.position.x + 50, rootNode.position.y + 30, {
+                        zoom: 1,
+                        duration: 300,
+                      });
+                    }
+                  }}
+                >
+                  <Home className="h-4 w-4 mr-2" />
+                  定位始祖
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => {
-                    setCollapsedIds(initialCollapsedIds);
+                    if (collapsedIds.size === 0) {
+                      // 当前是全部展开状态，收起
+                      setCollapsedIds(initialCollapsedIds);
+                    } else {
+                      // 当前是收起状态，展开
+                      if (collapsedIds.size <= 100 || confirm("展开全部可能会导致页面卡顿，你确定要展开全部吗？")) {
+                        onExpandAll();
+                      }
+                    }
                   }}
                 >
-                  <ChevronsUp className="h-4 w-4 mr-2" />
-                  收起前5世
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={toggleDraggable}>
-                  {isDraggable ? (
+                  {collapsedIds.size === 0 ? (
                     <>
-                      <Unlock className="h-4 w-4 mr-2" />
-                      解锁位置
+                      <ChevronsUp className="h-4 w-4 mr-2" />
+                      展示前{effectiveVisibleGenerations}世
                     </>
                   ) : (
                     <>
-                      <Lock className="h-4 w-4 mr-2" />
-                      锁定位置
+                      <ChevronsDown className="h-4 w-4 mr-2" />
+                      展开全部
                     </>
                   )}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={onDownload}>
-                  <Download className="h-4 w-4 mr-2" />
-                  保存图片
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={onExportJson}>
+                  <FileJson className="h-4 w-4 mr-2" />
+                  导出JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onExportMarkdown}>
+                  <FileText className="h-4 w-4 mr-2" />
+                  导出 Markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onExportSvg} disabled={isDownloading}>
+                  <FileCode className="h-4 w-4 mr-2" />
+                  导出 SVG
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1119,6 +1223,43 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
             共 {totalCount ?? initialData.length} 位成员（显示 {nodes.length} 个节点）
           </span>
         </Panel>
+
+        {/* 加载遮罩（展开全部或下载图片时） */}
+        {isPending && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-sm pointer-events-auto">
+            <div className="flex flex-col items-center gap-2 max-w-xs text-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">加载中</span>
+              <span className="text-xs text-muted-foreground/70">可能数据量比较大，请耐心等待...</span>
+            </div>
+          </div>
+        )}
+
+        {/* 下载图片时的加载遮罩 */}
+        {isDownloading && !isPending && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/50 backdrop-blur-sm pointer-events-none">
+            <div className="flex flex-col items-center gap-3 max-w-xs text-center bg-background/80 rounded-lg px-6 py-4 shadow-lg">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">正在生成图片...</span>
+              {downloadProgress.total > 1 ? (
+                <>
+                  <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-primary h-full transition-all duration-300"
+                      style={{ width: `${(downloadProgress.current / downloadProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground/70">
+                    第 {downloadProgress.current} / {downloadProgress.total} 块
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs text-muted-foreground/70">请稍候...</span>
+              )}
+              <span className="text-xs text-muted-foreground/50">节点数: {nodes.length}</span>
+            </div>
+          </div>
+        )}
       </ReactFlow>
     </div>
   );
@@ -1127,7 +1268,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
 /**
  * 虚拟化世系图容器 - 负责数据加载和状态管理
  */
-export function VirtualizedFamilyTreeGraph({ initialData, totalCount, onMemberClick, onSpouseClick }: VirtualizedFamilyTreeGraphProps) {
+export function VirtualizedFamilyTreeGraph({ initialData, totalCount, visibleGenerations, onMemberClick, onSpouseClick }: VirtualizedFamilyTreeGraphProps) {
   const [selectedMember, setSelectedMember] = useState<FamilyMemberNode | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
@@ -1169,6 +1310,7 @@ export function VirtualizedFamilyTreeGraph({ initialData, totalCount, onMemberCl
           initialData={initialData}
           allData={initialData}
           totalCount={totalCount}
+          visibleGenerations={visibleGenerations}
           onMemberClick={handleMemberClick}
           onSpouseClick={handleSpouseClick}
         />

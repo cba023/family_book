@@ -3,6 +3,7 @@ import { fetchFamilyMembersByGenerations, fetchGraphStats } from "./actions";
 import { VirtualizedFamilyTreeGraph } from "./virtualized-family-tree-graph";
 import { FamilyTreeGraph } from "./family-tree-graph";
 import { getUserRole } from "@/lib/auth/session";
+import { getVisibleGenerations } from "@/lib/runtime-config";
 import { LoginPrompt } from "@/components/login-prompt";
 
 function GraphSkeleton() {
@@ -31,6 +32,9 @@ async function GraphLoader() {
       </div>
     );
   }
+
+  // 获取可见代数配置
+  const visibleGenerations = getVisibleGenerations();
 
   // 先获取统计信息
   const stats = await fetchGraphStats();
@@ -62,6 +66,7 @@ async function GraphLoader() {
         allData={data}
         totalGenerations={maxGeneration || 1}
         totalCount={stats.total}
+        visibleGenerations={visibleGenerations}
       />
     );
   } else {
@@ -99,7 +104,7 @@ async function GraphLoader() {
       );
     }
 
-    return <VirtualizedFamilyTreeGraph initialData={data} />;
+    return <VirtualizedFamilyTreeGraph initialData={data} visibleGenerations={visibleGenerations} />;
   }
 }
 

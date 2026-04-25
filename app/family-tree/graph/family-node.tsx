@@ -39,8 +39,8 @@ function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
         // 变暗模式
         nodeData.isDimmed && "opacity-30 grayscale scale-95 blur-[0.5px]",
 
-        // 背景色
-        nodeData.is_alive ? "bg-card" : "bg-muted/50",
+        // 背景色统一白色
+        "bg-card",
 
         // 边框颜色逻辑
         nodeData.isHighlighted

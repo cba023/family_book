@@ -26,11 +26,6 @@ export function FlowingEdge({
   });
 
   return (
-    <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
-      <circle r="2" fill="hsl(var(--primary))">
-        <animateMotion dur="1.5s" repeatCount="indefinite" path={edgePath} />
-      </circle>
-    </>
+    <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
   );
 }
