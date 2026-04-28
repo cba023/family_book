@@ -455,34 +455,36 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
   const onToggleCollapse = useCallback((id: number) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
+
       if (next.has(id)) {
-        // 展开：显示自己和子女，子女的子孙全部收起
+        // 展开：显示自己，显示直接子女，收起孙辈及更深的
         next.delete(id);
+
         const children = childrenMap.get(id) || [];
-        children.forEach((childId) => {
-          next.delete(childId); // 显示子女
-          // 子女的子孙全部收起
-          const collectDescendants = (parentId: number) => {
-            const descendants = childrenMap.get(parentId) || [];
-            descendants.forEach((descendantId) => {
-              next.add(descendantId);
-              collectDescendants(descendantId);
+        children.forEach(childId => {
+          // 收起每个直接子女的子孙
+          const collapseChildren = (parentId: number) => {
+            const grandchildren = childrenMap.get(parentId) || [];
+            grandchildren.forEach(gcId => {
+              next.add(gcId);
+              collapseChildren(gcId);
             });
           };
-          collectDescendants(childId);
+          collapseChildren(childId);
         });
       } else {
         // 收起：隐藏自己和所有子孙
-        const collectDescendants = (parentId: number) => {
+        const collapseSubtree = (parentId: number) => {
           const children = childrenMap.get(parentId) || [];
-          children.forEach((childId) => {
+          children.forEach(childId => {
             next.add(childId);
-            collectDescendants(childId);
+            collapseSubtree(childId);
           });
         };
         next.add(id);
-        collectDescendants(id);
+        collapseSubtree(id);
       }
+
       return next;
     });
   }, [childrenMap]);

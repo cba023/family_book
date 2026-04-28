@@ -84,7 +84,6 @@ const NODE_HEIGHT = 120; // 增加高度以容纳配偶信息
 const VERTICAL_GAP = 150; // 代际间距
 const SIBLING_GAP = 40; // 亲兄弟姐妹间距
 const BRANCH_GAP = 80; // 不同父系分支间距（宽松）
-const VERTICAL_GAP = 120; // 代际间距
 
 // 手动布局：按父系分支分组，同父的紧密，不同父的有间距
 function getLayoutedElements(
