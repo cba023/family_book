@@ -451,17 +451,38 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
     setHighlightedPathIds(pathSet);
   }, [highlightedId, allMembersMap, childrenMap]);
 
-  // 折叠切换（收起/展开都收起子女）
+  // 折叠切换（展开只显示下一级，收起隐藏自己和所有子孙）
   const onToggleCollapse = useCallback((id: number) => {
     setCollapsedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
-        // 收起节点
+        // 展开：显示自己和子女，子女的子孙全部收起
         next.delete(id);
+        const children = childrenMap.get(id) || [];
+        children.forEach((childId) => {
+          next.delete(childId); // 显示子女
+          // 子女的子孙全部收起
+          const collectDescendants = (parentId: number) => {
+            const descendants = childrenMap.get(parentId) || [];
+            descendants.forEach((descendantId) => {
+              next.add(descendantId);
+              collectDescendants(descendantId);
+            });
+          };
+          collectDescendants(childId);
+        });
+      } else {
+        // 收起：隐藏自己和所有子孙
+        const collectDescendants = (parentId: number) => {
+          const children = childrenMap.get(parentId) || [];
+          children.forEach((childId) => {
+            next.add(childId);
+            collectDescendants(childId);
+          });
+        };
+        next.add(id);
+        collectDescendants(id);
       }
-      // 收起所有直接子女
-      const children = childrenMap.get(id) || [];
-      children.forEach((childId) => next.add(childId));
       return next;
     });
   }, [childrenMap]);

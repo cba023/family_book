@@ -15,10 +15,8 @@ function TableSkeleton() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <div className="h-9 w-64 bg-muted animate-pulse rounded-md" />
-        <div className="flex gap-2">
-          <div className="h-9 w-20 bg-muted animate-pulse rounded-md" />
-          <div className="h-9 w-20 bg-muted animate-pulse rounded-md" />
-        </div>
+        <div className="h-9 w-20 bg-muted animate-pulse rounded-md" />
+        <div className="h-9 w-20 bg-muted animate-pulse rounded-md" />
       </div>
       <div className="border rounded-lg">
         <div className="h-10 bg-muted/50 border-b" />
@@ -50,7 +48,7 @@ export default async function FamilyTreePage({ searchParams }: PageProps) {
   if (!user) {
     redirect("/auth/login");
   }
-  
+
   // 普通用户也可以查看成员列表，但只有管理员可以编辑
   const canEdit = canMaintainGenealogy(role);
 
