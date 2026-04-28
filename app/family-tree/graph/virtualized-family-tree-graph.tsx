@@ -839,7 +839,7 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
       const svgDataUrl = await toSvg(viewportElem, {
         width,
         height,
-        backgroundColor: "#ffffff",
+        backgroundColor: "transparent",
         style: {
           width: width.toString(),
           height: height.toString(),
