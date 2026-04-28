@@ -25,6 +25,10 @@ export interface FamilyNodeProps {
 function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
   const nodeData = data;
 
+  // 男性用方形（圆角矩形），女性用椭圆形（方便黑白打印区分）
+  const isMale = nodeData.gender === "男";
+  const isFemale = nodeData.gender === "女";
+
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (nodeData.onToggleCollapse) {
@@ -35,23 +39,24 @@ function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
   return (
     <div
       className={cn(
-        "px-1 py-2 rounded-lg border-2 text-card-foreground transition-all duration-300 relative group",
+        "px-1 py-2 text-card-foreground transition-all duration-300 relative group",
         // 变暗模式
         nodeData.isDimmed && "opacity-30 grayscale scale-95 blur-[0.5px]",
 
         // 背景色统一白色
         "bg-card",
 
-        // 边框颜色逻辑
+        // 形状：男性圆角矩形，女性椭圆形
+        isFemale ? "rounded-full" : "rounded-lg",
+
+        // 边框颜色：男性实线，女性虚线
         nodeData.isHighlighted
-          ? "border-amber-500 ring-4 ring-amber-400/50 scale-110 z-50"
+          ? "ring-4 ring-amber-400/50 scale-110 z-50 border-2 border-amber-500"
           : nodeData.isPathHighlighted
-            ? "border-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.4)] z-10"
-            : nodeData.gender === "男"
-              ? (nodeData.is_alive ? "border-blue-400 dark:border-blue-500" : "border-blue-300/40 dark:border-blue-900/40")
-              : nodeData.gender === "女"
-                ? (nodeData.is_alive ? "border-pink-400 dark:border-pink-500" : "border-pink-300/40 dark:border-pink-900/40")
-                : "border-border",
+            ? "shadow-[0_0_10px_rgba(251,191,36,0.4)] z-10 border-2 border-amber-400"
+            : isMale
+              ? "border-2 border-blue-400 dark:border-blue-500"
+              : "border-2 border-pink-400 dark:border-pink-500",
 
         // 有后代时才有阴影
         nodeData.hasChildren && "shadow-md",
@@ -59,16 +64,17 @@ function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
         // 折叠时的额外阴影
         nodeData.hasChildren && nodeData.collapsed && "shadow-lg",
 
-        // 已故样式
-        !nodeData.is_alive && !nodeData.isDimmed && "opacity-80 grayscale-[0.2]",
-
         // 悬浮提升感（有后代时才需要）
         nodeData.hasChildren && "hover:shadow-xl hover:-translate-y-0.5 transition-transform duration-300",
 
         // 折叠时的堆叠效果
         nodeData.hasChildren && nodeData.collapsed && [
-          "before:absolute before:inset-0 before:translate-x-1 before:translate-y-1 before:border-2 before:border-muted-foreground/20 before:rounded-lg before:-z-10",
-          "after:absolute after:inset-0 after:translate-x-2 after:translate-y-2 after:border-2 after:border-muted-foreground/10 after:rounded-lg after:-z-20"
+          isFemale
+            ? "before:absolute before:inset-0 before:translate-x-1 before:translate-y-1 before:border-2 before:border-muted-foreground/20 before:rounded-full before:-z-10 before:bg-transparent"
+            : "before:absolute before:inset-0 before:translate-x-1 before:translate-y-1 before:border-2 before:border-muted-foreground/20 before:rounded-lg before:-z-10",
+          isFemale
+            ? "after:absolute after:inset-0 after:translate-x-2 after:translate-y-2 after:border-2 after:border-muted-foreground/10 after:rounded-full after:-z-20 after:bg-transparent"
+            : "after:absolute after:inset-0 after:translate-x-2 after:translate-y-2 after:border-2 after:border-muted-foreground/10 after:rounded-lg after:-z-20"
         ]
       )}
       style={{ width: 28, minWidth: 28 }}
@@ -83,10 +89,7 @@ function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
       {/* 节点内容 - 纵向排列 */}
       <div className="flex flex-col items-center justify-center">
         <div
-          className={cn(
-            "font-medium text-sm text-center leading-tight tracking-wide",
-            !nodeData.is_alive && "text-foreground/80"
-          )}
+          className="font-medium text-sm text-center leading-tight tracking-wide"
           style={{ writingMode: "vertical-rl", textOrientation: "upright" }}
           title={nodeData.name}
         >

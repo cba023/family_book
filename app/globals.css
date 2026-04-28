@@ -114,3 +114,14 @@
   fill: hsl(var(--foreground));
   font-size: 14px;
 }
+
+/* 消除 recharts 和其他组件点击时的 focus outline */
+.recharts-wrapper:focus,
+.recharts-wrapper *:focus,
+.recharts-responsive-container:focus,
+.recharts-responsive-container *:focus,
+.tremor-Card-root:focus,
+.tremor-Card-root *:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}

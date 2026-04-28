@@ -1169,8 +1169,8 @@ const VirtualizedFamilyTreeGraphInner = memo(function VirtualizedFamilyTreeGraph
         </Panel>
 
         {/* 统计 */}
-        <Panel position="bottom-right" className="bg-background/95 backdrop-blur-sm border rounded-md px-3 py-2">
-          <span className="text-sm text-muted-foreground">
+        <Panel position="bottom-right" className="bg-background/95 backdrop-blur-sm border rounded-md px-3 py-2 outline-none">
+          <span className="text-sm text-muted-foreground select-none">
             共 {totalCount ?? initialData.length} 位成员（显示 {nodes.length} 个节点）
           </span>
         </Panel>
