@@ -35,8 +35,9 @@ export async function fetchFamilyStatistics(): Promise<{
       is_alive: boolean;
       birthday: string | null;
       is_married_in: boolean;
+      residence_place: string | null;
     }>(
-      `SELECT id, name, gender, generation, is_alive, birthday, is_married_in
+      `SELECT id, name, gender, generation, is_alive, birthday, is_married_in, residence_place
        FROM family_members
        ORDER BY generation ASC NULLS FIRST`,
     );
@@ -49,6 +50,7 @@ export async function fetchFamilyStatistics(): Promise<{
       is_alive: Boolean(m.is_alive),
       birthday: m.birthday != null ? String(m.birthday) : null,
       is_married_in: Boolean(m.is_married_in),
+      residence_place: m.residence_place != null ? String(m.residence_place) : null,
     }));
 
     const totalMembers = members.length;
