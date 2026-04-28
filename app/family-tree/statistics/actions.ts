@@ -10,8 +10,15 @@ export interface StatisticsData {
   generationStats: { name: string; value: number }[];
   statusStats: { name: string; value: number; fill: string }[];
   ageStats: { name: string; value: number }[];
+  aliveAgeStats: { name: string; value: number; fill: string }[];
   commonNames: { name: string; count: number }[];
   marriedInStats: { name: string; value: number; fill: string }[];
+  surnameStats: { name: string; count: number }[];
+  residenceStats: { name: string; value: number }[];
+  maleStats: { name: string; value: number }[];
+  femaleStats: { name: string; value: number }[];
+  marriedInFemaleCount: number;
+  marriedInFemaleFromCount: number;
 }
 
 export async function fetchFamilyStatistics(): Promise<{
@@ -46,7 +53,11 @@ export async function fetchFamilyStatistics(): Promise<{
 
     const totalMembers = members.length;
 
-    const genderCounts = members.reduce(
+    // 族裔（不含嫁入和始祖）性别统计
+    const nativeMembers = members.filter(
+      (m) => !m.is_married_in && m.generation !== 1
+    );
+    const nativeGenderCounts = nativeMembers.reduce(
       (acc, member) => {
         const gender = member.gender || "未知";
         acc[gender] = (acc[gender] || 0) + 1;
@@ -56,13 +67,13 @@ export async function fetchFamilyStatistics(): Promise<{
     );
 
     const genderStats = [
-      { name: "男", value: genderCounts["男"] || 0, fill: "#3b82f6" },
-      { name: "女", value: genderCounts["女"] || 0, fill: "#ec4899" },
+      { name: "男", value: nativeGenderCounts["男"] || 0, fill: "#3b82f6" },
+      { name: "女", value: nativeGenderCounts["女"] || 0, fill: "#ec4899" },
     ];
-    if (genderCounts["未知"]) {
+    if (nativeGenderCounts["未知"]) {
       genderStats.push({
         name: "未知",
-        value: genderCounts["未知"],
+        value: nativeGenderCounts["未知"],
         fill: "#94a3b8",
       });
     }
@@ -143,6 +154,38 @@ export async function fetchFamilyStatistics(): Promise<{
       .filter(([, value]) => value > 0)
       .map(([name, value]) => ({ name, value }));
 
+    // 在世成员年龄分布
+    const aliveAgeGroups: Record<string, number> = {
+      "0-30岁": 0,
+      "31-50岁": 0,
+      "51-60岁": 0,
+      "61-70岁": 0,
+      "71-80岁": 0,
+      "80岁以上": 0,
+      "未知": 0,
+    };
+    members.forEach((member) => {
+      if (!member.is_alive || !member.birthday) {
+        return;
+      }
+      const birthDate = new Date(member.birthday);
+      const age = now.getFullYear() - birthDate.getFullYear();
+      if (age <= 30) aliveAgeGroups["0-30岁"]++;
+      else if (age <= 50) aliveAgeGroups["31-50岁"]++;
+      else if (age <= 60) aliveAgeGroups["51-60岁"]++;
+      else if (age <= 70) aliveAgeGroups["61-70岁"]++;
+      else if (age <= 80) aliveAgeGroups["71-80岁"]++;
+      else aliveAgeGroups["80岁以上"]++;
+    });
+    const aliveAgeStats = [
+      { name: "0-30岁", value: aliveAgeGroups["0-30岁"], fill: "#22c55e" },
+      { name: "31-50岁", value: aliveAgeGroups["31-50岁"], fill: "#3b82f6" },
+      { name: "51-60岁", value: aliveAgeGroups["51-60岁"], fill: "#f59e0b" },
+      { name: "61-70岁", value: aliveAgeGroups["61-70岁"], fill: "#f97316" },
+      { name: "71-80岁", value: aliveAgeGroups["71-80岁"], fill: "#ec4899" },
+      { name: "80岁以上", value: aliveAgeGroups["80岁以上"], fill: "#8b5cf6" },
+    ];
+
     const nameCounts: Record<string, number> = {};
     members.forEach((member) => {
       if (member.name && member.name.length > 0) {
@@ -170,6 +213,87 @@ export async function fetchFamilyStatistics(): Promise<{
       { name: "嫁入", value: marriedInCounts["嫁入"] || 0, fill: "#f97316" },
     ];
 
+    // 嫁入女性数量
+    const marriedInFemaleCount = members.filter(
+      (m) => m.gender === "女" && m.is_married_in
+    ).length;
+
+    // 本族女性数量（女性族裔）
+    const marriedInFemaleFromCount = members.filter(
+      (m) => m.gender === "女" && !m.is_married_in
+    ).length;
+
+    // 姓氏分布统计（取姓氏首字）
+    const surnameCounts: Record<string, number> = {};
+    members.forEach((member) => {
+      if (member.name && member.name.length > 0) {
+        const surname = member.name[0];
+        surnameCounts[surname] = (surnameCounts[surname] || 0) + 1;
+      }
+    });
+    const surnameStats = Object.entries(surnameCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }));
+
+    // 居所分布统计
+    const residenceCounts: Record<string, number> = {};
+    members.forEach((member) => {
+      const place = member.residence_place || "未知";
+      residenceCounts[place] = (residenceCounts[place] || 0) + 1;
+    });
+    const residenceStats = Object.entries(residenceCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, value]) => ({ name, value }));
+
+    // 计算在世成员的年龄分布（男女分开）
+    const maleAgeGroups: Record<string, number> = {
+      "0-30岁": 0,
+      "31-50岁": 0,
+      "51-60岁": 0,
+      "61-70岁": 0,
+      "71-80岁": 0,
+      "80岁以上": 0,
+      "未知": 0,
+    };
+    const femaleAgeGroups = { ...maleAgeGroups };
+
+    members.forEach((member) => {
+      if (!member.is_alive || !member.birthday) {
+        if (member.gender === "男") maleAgeGroups["未知"]++;
+        else if (member.gender === "女") femaleAgeGroups["未知"]++;
+        return;
+      }
+
+      const birthDate = new Date(member.birthday);
+      const age = now.getFullYear() - birthDate.getFullYear();
+
+      if (member.gender === "男") {
+        if (age <= 30) maleAgeGroups["0-30岁"]++;
+        else if (age <= 50) maleAgeGroups["31-50岁"]++;
+        else if (age <= 60) maleAgeGroups["51-60岁"]++;
+        else if (age <= 70) maleAgeGroups["61-70岁"]++;
+        else if (age <= 80) maleAgeGroups["71-80岁"]++;
+        else maleAgeGroups["80岁以上"]++;
+      } else if (member.gender === "女") {
+        if (age <= 30) femaleAgeGroups["0-30岁"]++;
+        else if (age <= 50) femaleAgeGroups["31-50岁"]++;
+        else if (age <= 60) femaleAgeGroups["51-60岁"]++;
+        else if (age <= 70) femaleAgeGroups["61-70岁"]++;
+        else if (age <= 80) femaleAgeGroups["71-80岁"]++;
+        else femaleAgeGroups["80岁以上"]++;
+      }
+    });
+
+    const maleStats = Object.entries(maleAgeGroups)
+      .filter(([, value]) => value > 0)
+      .map(([name, value]) => ({ name, value }));
+
+    const femaleStats = Object.entries(femaleAgeGroups)
+      .filter(([, value]) => value > 0)
+      .map(([name, value]) => ({ name, value }));
+
     const { user } = await requireUser();
 
     return {
@@ -181,6 +305,13 @@ export async function fetchFamilyStatistics(): Promise<{
         ageStats,
         commonNames,
         marriedInStats,
+        surnameStats,
+        residenceStats,
+        maleStats,
+        femaleStats,
+        marriedInFemaleCount,
+        marriedInFemaleFromCount,
+        aliveAgeStats,
       },
       error: null,
       requireAuth: !user,
