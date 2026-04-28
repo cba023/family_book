@@ -6,7 +6,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { User, BookOpen, ScrollText, ArrowRight, ArrowLeft, X } from "lucide-react";
+import { User, BookOpen, ScrollText, ArrowRight, ArrowLeft, X, Users } from "lucide-react";
+import Link from "next/link";
 import type { FamilyMemberNode } from "./graph/actions";
 import { RichTextViewer } from "@/components/rich-text/viewer";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -235,7 +236,18 @@ export function MemberDetailDialog({
                 </div>
 
                 {/* Footer / Navigation */}
-                <div className="p-3 sm:p-4 bg-stone-50 dark:bg-stone-800/80 border-t border-stone-200 dark:border-stone-700 flex justify-end shrink-0">
+                <div className="p-3 sm:p-4 bg-stone-50 dark:bg-stone-800/80 border-t border-stone-200 dark:border-stone-700 flex justify-between shrink-0">
+                  {/* 男性成员显示后代按钮 */}
+                  {member.gender === "男" && (
+                    <Link href={`/family-tree/descendants?id=${member.id}`} target="_blank">
+                      <Button variant="outline" size="sm" className="font-serif gap-1">
+                        <Users className="h-4 w-4" />
+                        他的后代
+                      </Button>
+                    </Link>
+                  )}
+                  {/* 占位元素确保布局一致 */}
+                  {!member.gender || member.gender !== "男" ? <div /> : null}
                   <Button 
                     variant="ghost" 
                     className="text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/50 dark:hover:bg-stone-700/50 gap-2 font-serif text-sm sm:text-base"
@@ -305,14 +317,23 @@ export function MemberDetailDialog({
                 </div>
 
                 {/* Footer / Navigation */}
-                <div className="p-3 sm:p-4 bg-stone-50 dark:bg-stone-800/80 border-t border-stone-200 dark:border-stone-700 flex justify-start shrink-0">
-                   <Button 
+                <div className="p-3 sm:p-4 bg-stone-50 dark:bg-stone-800/80 border-t border-stone-200 dark:border-stone-700 flex justify-between shrink-0">
+                  <Button 
                     variant="ghost" 
                     className="text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-200/50 dark:hover:bg-stone-700/50 gap-2 font-serif text-sm sm:text-base"
                     onClick={() => setIsFlipped(false)}
                   >
                     <ArrowLeft className="w-4 h-4" /> 基本信息
                   </Button>
+                  {/* 男性成员显示后代按钮 */}
+                  {member.gender === "男" && (
+                    <Link href={`/family-tree/descendants?id=${member.id}`} target="_blank">
+                      <Button variant="outline" size="sm" className="font-serif gap-1">
+                        <Users className="h-4 w-4" />
+                        他的后代
+                      </Button>
+                    </Link>
+                  )}
                 </div>
 
               </div>

@@ -15,6 +15,7 @@ export interface FamilyNodeData extends FamilyMemberNode {
   onToggleCollapse?: (id: number) => void;
   onSpouseClick?: (spouseId: number) => void;
   branchColor?: string;
+  hideCollapseButton?: boolean; // 隐藏折叠按钮
   [key: string]: unknown;
 }
 
@@ -110,8 +111,8 @@ function FamilyMemberNodeComponent({ data }: FamilyNodeProps) {
         />
       )}
 
-      {/* 折叠/展开按钮 */}
-      {nodeData.hasChildren && (
+      {/* 折叠/展开按钮 - 可通过 hideCollapseButton 隐藏 */}
+      {nodeData.hasChildren && !nodeData.hideCollapseButton && (
         <button
           onClick={handleToggle}
           className={cn(
