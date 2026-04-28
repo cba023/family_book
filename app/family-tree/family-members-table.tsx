@@ -49,9 +49,8 @@ import {
   fetchAllMembersForSelect,
   fetchMemberById,
 } from "./actions";
-import { ImportMembersDialog } from "./import-members-dialog";
-import { GedcomImportExport } from "./gedcom-import-export";
 import { FatherCombobox } from "./father-combobox";
+import { CsvExportButton } from "./csv-export-button";
 import { RichTextEditor } from "@/components/rich-text/editor";
 import { RichTextViewer } from "@/components/rich-text/viewer";
 import { cn } from "@/lib/utils";
@@ -442,13 +441,11 @@ export function FamilyMembersTable({
         {/* 操作按钮 - 只有管理员可以编辑 */}
         {canEdit && (
           <div className="flex gap-2 flex-wrap w-full lg:w-auto">
-            <ImportMembersDialog onSuccess={() => router.refresh()} />
-            <GedcomImportExport onSuccess={() => router.refresh()} />
-            
             <Button onClick={handleOpenAddDialog}>
               <Plus className="h-4 w-4 mr-2" />
               新增
             </Button>
+            <CsvExportButton />
 
             <Button
               variant="destructive"
@@ -1054,7 +1051,6 @@ export function FamilyMembersTable({
               <TableHead className="w-20">在世</TableHead>
               <TableHead>配偶</TableHead>
               <TableHead>生平事迹</TableHead>
-              <TableHead className="w-44">更新时间</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1179,9 +1175,6 @@ export function FamilyMembersTable({
                     ) : (
                       "-"
                     )}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(member.updated_at).toLocaleString("zh-CN")}
                   </TableCell>
                 </TableRow>
               ))

@@ -4,7 +4,6 @@ import { requireUser, requireAdmin, numId } from "@/lib/auth/session";
 import { formatActionError } from "@/lib/format-action-error";
 import { query, queryOne, getPool } from "@/lib/pg";
 import { revalidatePath } from "next/cache";
-import { exportToGedcom, parseGedcom } from "@/lib/gedcom";
 import { FAMILY_SURNAME } from "@/lib/utils";
 import { normalizedIsMarriedIn } from "@/lib/family-member-married-in";
 import { dedupeSpouseIdsPreserveOrder } from "@/lib/family-member-spouse-ids";
@@ -219,6 +218,139 @@ export async function fetchFamilyMembers(
     return {
       data: [],
       count: 0,
+      error: formatActionError(error),
+    };
+  }
+}
+
+export async function exportFamilyMembersToCsv(): Promise<{
+  content: string;
+  error: string | null;
+}> {
+  const { user, error: authError } = await requireUser();
+  if (!user) {
+    return { content: "", error: authError };
+  }
+
+  try {
+    // 获取所有成员数据
+    const rows = await query<Record<string, unknown>>(
+      `SELECT * FROM family_members ORDER BY generation ASC NULLS FIRST, sibling_order ASC NULLS FIRST`,
+    );
+
+    if (rows.length === 0) {
+      return { content: "", error: null };
+    }
+
+    // 获取所有父亲姓名映射
+    const fatherIds = rows
+      .map((item) => item.father_id)
+      .filter((id): id is number | string => id != null)
+      .map(numId);
+    const fatherMap: Record<number, string> = {};
+    if (fatherIds.length > 0) {
+      const fathers = await query<{ id: number; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [fatherIds],
+      );
+      for (const f of fathers) {
+        fatherMap[numId(f.id)] = String(f.name);
+      }
+    }
+
+    // 获取所有配偶姓名映射
+    const memberIds = rows.map((r) => numId(r.id));
+    const allSpouseIds = memberIds.flatMap((mid) => {
+      const raw = rows.find((r) => numId(r.id) === mid)?.spouse_ids;
+      return Array.isArray(raw) ? raw.map(numId).filter((v) => !isNaN(v)) : [];
+    });
+    const spouseNamesMap: Record<number, string[]> = {};
+    if (allSpouseIds.length > 0) {
+      const uniqueSpouseIds = [...new Set(allSpouseIds)];
+      const spouses = await query<{ id: bigint; name: string }>(
+        `SELECT id, name FROM family_members WHERE id = ANY($1::bigint[])`,
+        [uniqueSpouseIds],
+      );
+      const nameById: Record<number, string> = {};
+      for (const s of spouses) {
+        nameById[numId(s.id)] = String(s.name);
+      }
+      for (const mid of memberIds) {
+        const raw = rows.find((r) => numId(r.id) === mid)?.spouse_ids;
+        const ids = dedupeSpouseIdsPreserveOrder(raw);
+        spouseNamesMap[mid] = ids.map((sid) => nameById[sid]).filter(Boolean) as string[];
+      }
+    }
+
+    // CSV 标题行
+    const headers = [
+      "ID",
+      "姓名",
+      "性别",
+      "世代",
+      "排行",
+      "父亲",
+      "配偶",
+      "是否在世",
+      "是否嫁入",
+      "职业",
+      "生日",
+      "去世日期",
+      "居住地",
+      "备注",
+    ];
+
+    // 格式化日期为 YYYY-MM-DD
+    const formatDate = (dateValue: unknown): string => {
+      if (!dateValue) return "";
+      const str = String(dateValue);
+      if (str.includes("T")) {
+        return str.split("T")[0];
+      }
+      return str;
+    };
+
+    // 生成 CSV 数据行
+    const csvRows = rows.map((item) => {
+      const id = numId(item.id);
+      const fatherName = item.father_id != null ? fatherMap[numId(item.father_id)] || "" : "";
+      const spouseNames = spouseNamesMap[id] || [];
+      return [
+        id,
+        String(item.name ?? ""),
+        item.gender === "男" ? "男" : item.gender === "女" ? "女" : "",
+        item.generation != null ? String(item.generation) : "",
+        item.sibling_order != null ? String(item.sibling_order) : "",
+        fatherName,
+        spouseNames.join("、"),
+        item.is_alive ? "是" : "否",
+        item.is_married_in ? "是" : "否",
+        String(item.official_position ?? ""),
+        formatDate(item.birthday),
+        formatDate(item.death_date),
+        String(item.residence_place ?? ""),
+        String(item.remarks ?? ""),
+      ];
+    });
+
+    // 转义 CSV 字段
+    const escapeCsvField = (field: string): string => {
+      if (field.includes(",") || field.includes('"') || field.includes("\n")) {
+        return `"${field.replace(/"/g, '""')}"`;
+      }
+      return field;
+    };
+
+    const csvContent = [
+      headers.join(","),
+      ...csvRows.map((row) => row.map((cell) => escapeCsvField(String(cell))).join(",")),
+    ].join("\n");
+
+    return { content: csvContent, error: null };
+  } catch (error) {
+    console.error("Error exporting to CSV:", error);
+    return {
+      content: "",
       error: formatActionError(error),
     };
   }
@@ -683,118 +815,6 @@ export async function exportFamilyMembersToJson(): Promise<{
     console.error("Error exporting family members:", error);
     return {
       data: [],
-      error: formatActionError(error),
-    };
-  }
-}
-
-export async function exportFamilyMembersToGedcom(familyName: string): Promise<{
-  content: string;
-  error: string | null;
-}> {
-  const { user, error: authError } = await requireAdmin();
-  if (!user) {
-    return { content: "", error: authError };
-  }
-
-  try {
-    const { data, error } = await fetchFamilyMembers(1, 10000, "");
-    if (error) {
-      return { content: "", error };
-    }
-
-    const gedcomContent = exportToGedcom(data, { familyName });
-    return { content: gedcomContent, error: null };
-  } catch (error) {
-    console.error("Error exporting to GEDCOM:", error);
-    return {
-      content: "",
-      error: formatActionError(error),
-    };
-  }
-}
-
-export async function importFamilyMembersFromGedcom(gedcomContent: string): Promise<{
-  success: boolean;
-  count: number;
-  error: string | null;
-}> {
-  const { user, error: authError } = await requireAdmin();
-  if (!user) {
-    return { success: false, count: 0, error: authError };
-  }
-
-  try {
-    const members = parseGedcom(gedcomContent);
-    
-    // 批量导入成员
-    const pool = getPool();
-    await pool.query("BEGIN");
-    
-    // 第一步：导入所有成员，不包含关系
-    const memberIdMap = new Map<number, number>(); // 临时 ID -> 实际数据库 ID
-    for (const member of members) {
-      const { rows } = await pool.query(
-        `INSERT INTO family_members (
-          user_id, name, generation, sibling_order, father_id, gender,
-          official_position, is_alive, spouse_ids, is_married_in,
-          remarks, birthday, death_date, residence_place
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '{}', $9, $10, $11, $12, $13)
-        RETURNING id`,
-        [
-          user.id, // 当前用户的 ID
-          member.name,
-          member.generation,
-          member.sibling_order,
-          null, // 先设为 null，稍后更新
-          member.gender,
-          member.official_position,
-          member.is_alive,
-          normalizedIsMarriedIn(member.gender, member.is_married_in),
-          member.remarks,
-          member.birthday,
-          member.death_date,
-          member.residence_place
-        ]
-      );
-      if (rows.length > 0) {
-        memberIdMap.set(member.id, rows[0].id);
-      }
-    }
-    
-    // 第二步：更新关系
-    for (const member of members) {
-      const actualId = memberIdMap.get(member.id);
-      if (actualId) {
-        const actualFatherId = member.father_id ? memberIdMap.get(member.father_id) : null;
-        // 解析配偶 ID 列表（从 GEDCOM 导入的临时 ID 映射到实际数据库 ID）
-        const spouseIds = (member.spouse_ids ?? [])
-          .map(sid => memberIdMap.get(sid))
-          .filter((id): id is number => id !== undefined);
-
-        // 更新 father_id 和 spouse_ids 数组
-        await pool.query(
-          `UPDATE family_members SET father_id = $1 WHERE id = $2`,
-          [actualFatherId, actualId]
-        );
-
-        await applySpouseLinksForMember(
-          numId(actualId),
-          dedupeSpouseIdsPreserveOrder(spouseIds),
-        );
-      }
-    }
-    
-    const count = members.length;
-    
-    await pool.query("COMMIT");
-    revalidatePath("/family-tree", "layout");
-    return { success: true, count, error: null };
-  } catch (error) {
-    console.error("Error importing from GEDCOM:", error);
-    return {
-      success: false,
-      count: 0,
       error: formatActionError(error),
     };
   }
