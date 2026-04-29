@@ -20,6 +20,7 @@ interface MemberDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   member: FamilyMemberNode | null;
   fatherName?: string | null;
+  onSpouseClick?: (spouseId: number) => void;
 }
 
 export function MemberDetailDialog({
@@ -27,6 +28,7 @@ export function MemberDetailDialog({
   onOpenChange,
   member,
   fatherName,
+  onSpouseClick,
 }: MemberDetailDialogProps) {
   const [isFlipped, setIsFlipped] = useState(false);
 
@@ -150,8 +152,21 @@ export function MemberDetailDialog({
                       </div>
                       <div className="space-y-1">
                         <span className="text-[10px] sm:text-xs font-bold text-stone-400 dark:text-stone-500 uppercase tracking-wider">配偶</span>
-                        <div className="p-2 sm:p-3 bg-stone-50 dark:bg-stone-800/50 rounded border border-stone-100 dark:border-stone-700 text-stone-800 dark:text-stone-200 font-medium text-sm sm:text-base">
-                          {(member as any).spouse_names?.join("、") || "未记录"}
+                        <div className="flex flex-wrap gap-1.5 p-2 sm:p-3 bg-stone-50 dark:bg-stone-800/50 rounded border border-stone-100 dark:border-stone-700 text-stone-800 dark:text-stone-200 font-medium text-sm sm:text-base">
+                          {(member as any).spouse_names?.length > 0 ? (
+                            member.spouse_ids?.map((spouseId, idx) => (
+                              <button
+                                key={spouseId}
+                                onClick={() => onSpouseClick?.(spouseId)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-700 rounded text-amber-700 dark:text-amber-300 transition-colors text-xs sm:text-sm"
+                              >
+                                {(member as any).spouse_names?.[idx] || "未知"}
+                                <span className="text-amber-400/50">→</span>
+                              </button>
+                            ))
+                          ) : (
+                            "未记录"
+                          )}
                         </div>
                       </div>
                     </div>

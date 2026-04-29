@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toSvg } from "html-to-image";
 import type { DescendantNode } from "./actions";
+import { fetchMemberById } from "../actions";
 import { FamilyMemberNodeType, type FamilyNodeData } from "../graph/family-node";
 import { GenerationNodeType } from "../graph/generation-node";
 import { FlowingEdge } from "../graph/flowing-edge";
@@ -188,6 +189,28 @@ const DescendantsTreeGraphInner = memo(function DescendantsTreeGraphInner({
     allMembers.forEach((m) => map.set(m.id, m));
     return map;
   }, [allMembers]);
+
+  // 处理配偶点击 - 需要查询所有成员（包括嫁入的）
+  const handleSpouseClick = useCallback(async (spouseId: number) => {
+    // 首先在当前数据中查找
+    let spouse = familyMap.get(spouseId);
+
+    // 如果找不到（嫁入的成员不在数据中），需要额外查询
+    if (!spouse) {
+      try {
+        const result = await fetchMemberById(spouseId);
+        if (result) {
+          spouse = result as unknown as DescendantNode;
+        }
+      } catch (error) {
+        console.error("Error fetching spouse:", error);
+      }
+    }
+
+    if (spouse) {
+      setSelectedMember(spouse);
+    }
+  }, [familyMap]);
 
   // 构建 childrenMap
   const childrenMap = useMemo(() => {
@@ -380,17 +403,9 @@ const DescendantsTreeGraphInner = memo(function DescendantsTreeGraphInner({
 
         {/* 工具栏 */}
         <Panel
-          position="top-left"
-          className="!absolute !top-0 !left-0 !w-full !m-0 p-2 sm:p-4 flex justify-between items-start pointer-events-none z-10"
+          position="top-right"
+          className="!absolute !top-0 !right-0 !m-0 p-2 sm:p-4 pointer-events-none z-10"
         >
-          {/* 左侧信息 */}
-          <div className="pointer-events-auto bg-background/95 backdrop-blur-sm border rounded-md px-3 py-2 shadow-sm">
-            <div className="text-sm">
-              <div className="font-medium">{ancestor.name} 的后代</div>
-              <div className="text-muted-foreground">共 {descendantCount} 人</div>
-            </div>
-          </div>
-
           {/* 右侧按钮 */}
           <div className="pointer-events-auto flex items-center gap-2">
             <Button
@@ -490,6 +505,7 @@ const DescendantsTreeGraphInner = memo(function DescendantsTreeGraphInner({
           isOpen={!!selectedMember}
           onOpenChange={(open) => !open && setSelectedMember(null)}
           fatherName={selectedMember.father_id ? familyMap.get(selectedMember.father_id)?.name : undefined}
+          onSpouseClick={handleSpouseClick}
         />
       )}
     </div>

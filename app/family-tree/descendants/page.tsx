@@ -1,16 +1,15 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { fetchDescendants } from "./actions";
 import { DescendantsTreeGraph } from "./descendants-graph";
-import { ChevronLeft } from "lucide-react";
+import { BackToGraphLink } from "./back-to-graph-button";
 import { getUserRole } from "@/lib/auth/session";
 import { LoginPrompt } from "@/components/login-prompt";
 
 function DescendantsSkeleton() {
   return (
     <div className="w-full h-[calc(100vh-200px)] min-h-[500px] border rounded-lg bg-muted/20 animate-pulse flex items-center justify-center">
-      <div className="text-muted-foreground">加载后代世系图...</div>
+      <div className="text-muted-foreground">加载中...</div>
     </div>
   );
 }
@@ -42,18 +41,25 @@ async function DescendantsLoader({ id }: { id: number }) {
 
   if (result.descendantCount === 0) {
     return (
-      <div className="bg-muted/50 text-muted-foreground p-8 rounded-lg text-center">
-        <p className="text-foreground font-medium mb-2">{result.ancestor.name} 暂无后代记录</p>
-      </div>
+      <>
+        <h1 className="text-3xl font-bold mb-6">{result.ancestor.name}的后代（0人）</h1>
+        <div className="bg-muted/50 text-muted-foreground p-8 rounded-lg text-center">
+          <p className="text-foreground font-medium mb-2">{result.ancestor.name} 暂无后代记录</p>
+        </div>
+      </>
     );
   }
 
   return (
-    <DescendantsTreeGraph
-      ancestor={result.ancestor}
-      descendants={result.data}
-      descendantCount={result.descendantCount}
-    />
+    <>
+      <h1 className="text-3xl font-bold mb-6">{result.ancestor.name}的后代（{result.descendantCount}人）</h1>
+
+      <DescendantsTreeGraph
+        ancestor={result.ancestor}
+        descendants={result.data}
+        descendantCount={result.descendantCount}
+      />
+    </>
   );
 }
 
@@ -73,8 +79,8 @@ export default async function DescendantsPage({ searchParams }: PageProps) {
 
   return (
     <div className="container mx-auto py-8 px-4">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 mb-6">
-        <h1 className="text-3xl font-bold">后代世系图</h1>
+      <div className="flex items-center gap-2 mb-6">
+        <BackToGraphLink />
       </div>
 
       <Suspense fallback={<DescendantsSkeleton />}>

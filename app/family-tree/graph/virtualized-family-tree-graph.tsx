@@ -1272,6 +1272,7 @@ export function VirtualizedFamilyTreeGraph({ initialData, totalCount, visibleGen
         onOpenChange={setIsDetailOpen}
         member={selectedMember}
         fatherName={getFatherName(selectedMember?.father_id || null)}
+        onSpouseClick={handleSpouseClick}
       />
     </>
   );

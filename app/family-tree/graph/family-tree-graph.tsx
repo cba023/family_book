@@ -1046,6 +1046,7 @@ export function FamilyTreeGraph({ initialData }: FamilyTreeGraphProps) {
         onOpenChange={setIsDetailOpen}
         member={selectedMember}
         fatherName={getFatherName(selectedMember?.father_id || null)}
+        onSpouseClick={handleSpouseClick}
       />
     </>
   );
