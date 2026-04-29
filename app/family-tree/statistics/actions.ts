@@ -55,11 +55,8 @@ export async function fetchFamilyStatistics(): Promise<{
 
     const totalMembers = members.length;
 
-    // 族裔（不含嫁入和始祖）性别统计
-    const nativeMembers = members.filter(
-      (m) => !m.is_married_in && m.generation !== 1
-    );
-    const nativeGenderCounts = nativeMembers.reduce(
+    // 所有成员性别统计
+    const allGenderCounts = members.reduce(
       (acc, member) => {
         const gender = member.gender || "未知";
         acc[gender] = (acc[gender] || 0) + 1;
@@ -69,13 +66,13 @@ export async function fetchFamilyStatistics(): Promise<{
     );
 
     const genderStats = [
-      { name: "男", value: nativeGenderCounts["男"] || 0, fill: "#3b82f6" },
-      { name: "女", value: nativeGenderCounts["女"] || 0, fill: "#ec4899" },
+      { name: "男", value: allGenderCounts["男"] || 0, fill: "#3b82f6" },
+      { name: "女", value: allGenderCounts["女"] || 0, fill: "#ec4899" },
     ];
-    if (nativeGenderCounts["未知"]) {
+    if (allGenderCounts["未知"]) {
       genderStats.push({
         name: "未知",
-        value: nativeGenderCounts["未知"],
+        value: allGenderCounts["未知"],
         fill: "#94a3b8",
       });
     }
@@ -220,7 +217,7 @@ export async function fetchFamilyStatistics(): Promise<{
       (m) => m.gender === "女" && m.is_married_in
     ).length;
 
-    // 本族女性数量（女性族裔）
+    // 本族女性数量
     const marriedInFemaleFromCount = members.filter(
       (m) => m.gender === "女" && !m.is_married_in
     ).length;
