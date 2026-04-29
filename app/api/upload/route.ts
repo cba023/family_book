@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 返回 SeaweedFS 的 URL
-    const url = `${SEAWEEDFS_URL}/images/${filename}`;
+    // 返回代理地址（让浏览器通过网站服务端访问）
+    const url = `/api/uploads/${filename}`;
 
     return NextResponse.json({
       success: true,
