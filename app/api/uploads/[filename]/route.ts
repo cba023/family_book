@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 const SEAWEEDFS_URL = process.env.SEAWEEDFS_URL || "http://192.168.1.8:18888";
 
+// 标记为动态路由，支持静态导出
+export const dynamic = "force-dynamic";
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ filename: string }> }
@@ -30,42 +33,19 @@ export async function GET(
     }
 
     // 获取文件内容
-    const arrayBuffer = await seaweedResponse.arrayBuffer();
-    const headers = new Headers();
+    const blob = await seaweedResponse.blob();
 
-    // 复制内容类型
-    const contentType = seaweedResponse.headers.get("content-type");
-    if (contentType) {
-      headers.set("content-type", contentType);
-    }
-
-    // 复制其他重要头部
-    const contentLength = seaweedResponse.headers.get("content-length");
-    if (contentLength) {
-      headers.set("content-length", contentLength);
-    }
-
-    const lastModified = seaweedResponse.headers.get("last-modified");
-    if (lastModified) {
-      headers.set("last-modified", lastModified);
-    }
-
-    const etag = seaweedResponse.headers.get("etag");
-    if (etag) {
-      headers.set("etag", etag);
-    }
-
-    // 设置缓存
-    headers.set("cache-control", "public, max-age=31536000, immutable");
-
-    return new NextResponse(arrayBuffer, {
-      status: 200,
-      headers,
+    // 返回图片
+    return new NextResponse(blob, {
+      headers: {
+        "Content-Type": seaweedResponse.headers.get("Content-Type") || "image/jpeg",
+        "Cache-Control": "public, max-age=31536000",
+      },
     });
   } catch (error) {
-    console.error("Upload proxy error:", error);
+    console.error("代理图片失败:", error);
     return NextResponse.json(
-      { error: "代理失败" },
+      { error: "获取图片失败" },
       { status: 500 }
     );
   }

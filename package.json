@@ -16,6 +16,9 @@
     "docker:save:amd64": "IMAGE_NAME=familybook TAG=amd64 bash scripts/docker-save-tar.sh dist/familybook-amd64.tar"
   },
   "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/cli": "^6.2.1",
+    "@capacitor/core": "^6.2.1",
     "@dagrejs/dagre": "^1.1.8",
     "@radix-ui/react-checkbox": "^1.3.1",
     "@radix-ui/react-dialog": "^1.1.15",

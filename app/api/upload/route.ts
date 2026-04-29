@@ -3,6 +3,8 @@ import path from "path";
 
 const SEAWEEDFS_URL = process.env.SEAWEEDFS_URL || "http://192.168.1.8:18888";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
